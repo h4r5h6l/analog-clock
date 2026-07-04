@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Analog Clock
+Exec=clock
+Icon=clock
+Categories=Utility;

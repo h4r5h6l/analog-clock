@@ -1,0 +1,44 @@
+# Analog Clock Project
+
+Welcome to the Analog Clock project! This is a simple analog clock application built with Python and Tkinter.
+
+## Installation
+
+To install the required dependencies, run:
+```sh
+pip install -r requirements.txt
+```
+
+## Usage
+
+1. **Build the Application**:
+   Run the following command to build the Analog Clock application.
+   ```sh
+   python ./analogclock/src/main.py
+   ```
+
+2. **Create a Distribution Package** (Optional):
+   If you want to distribute your project, you can use `setup.py`:
+   ```sh
+   python setup.py sdist bdist_wheel
+   ```
+
+## Creating an AppImage (Linux Only)
+
+To create an AppImage, follow these steps:
+
+1. **Install `linuxdeploy-x86_64.AppImage`**: Download and make the `linuxdeploy-x86_64.AppImage` executable.
+   ```sh
+   wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+   chmod +x linuxdeploy-x86_64.AppImage
+   ```
+
+2. **Create the AppDir**:
+   Ensure your project structure is correct and create an `AppDir` if it doesn't exist.
+
+3. **Run `linuxdeploy-x86_64.AppImage`**:
+   ```sh
+   ./linuxdeploy-x86_64.AppImage --appdir ./AnalogClock.Appdir --executable ./dist/clock --desktop-file ./app.desktop --icon-file ./clock.png --output appimage
+   ```
+
+This will generate an AppImage file that you can distribute and run on Linux systems.
