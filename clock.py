@@ -506,8 +506,8 @@ class AnalogClock(QWidget):
             QRectF(text_x, text_y, panel_width - (padding * 2), line_height),
             Qt.AlignLeft,
             cpu_text,
-            clock_color,
             border_color,
+            clock_color,
         )
         
         self.draw_outlined_text(
@@ -515,8 +515,8 @@ class AnalogClock(QWidget):
             QRectF(text_x, text_y + line_height, panel_width - (padding * 2), line_height),
             Qt.AlignLeft,
             ram_text,
-            clock_color,
             border_color,
+            clock_color,
         )
         
         self.draw_outlined_text(
@@ -524,8 +524,8 @@ class AnalogClock(QWidget):
             QRectF(text_x, text_y + (line_height * 2), panel_width - (padding * 2), line_height),
             Qt.AlignLeft,
             gpu_text,
-            clock_color,
             border_color,
+            clock_color,
         )
         
         self.draw_outlined_text(
@@ -533,8 +533,8 @@ class AnalogClock(QWidget):
             QRectF(text_x, text_y + (line_height * 3), panel_width - (padding * 2), line_height),
             Qt.AlignLeft,
             vram_text,
-            clock_color,
             border_color,
+            clock_color,
         )
         
         self.draw_outlined_text(
@@ -542,8 +542,8 @@ class AnalogClock(QWidget):
             QRectF(text_x, text_y + (line_height * 4), panel_width - (padding * 2), line_height),
             Qt.AlignLeft,
             f" {battery_text}",
-            clock_color,
             border_color,
+            clock_color,
         )
 
     def paintEvent(self, event):
@@ -560,8 +560,11 @@ class AnalogClock(QWidget):
         # If display_color is dark (white text), sheet should be dark to match
         # If display_color is light (black text), sheet should be light
         clock_color = QColor(self.display_color)
-        is_light_desktop = clock_color == QColor(Qt.black)  # black text means light background
-        sheet_color = QColor(Qt.white) if is_light_desktop else QColor(Qt.black)
+        avg_lum = (0.2126 * clock_color.red() + 0.7152 * clock_color.green()
+                   + 0.0722 * clock_color.blue())
+        # display_color contrasts with the desktop, so the sheet should follow
+        # the same tone: dark display_color -> dark sheet, light -> light.
+        sheet_color = QColor(Qt.black) if avg_lum <= 128 else QColor(Qt.white)
         sheet_opacity = 0.82
         
         # Draw the specs sheet
