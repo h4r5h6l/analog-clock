@@ -1,3 +1,11 @@
+# GUI framework (Qt widgets, painting, timers)
 PyQt5>=5.15.0
+
+# CPU and RAM usage statistics
 psutil>=5.9.0
+
+# NVIDIA GPU monitoring (optional at runtime -- falls back to nvidia-smi)
 GPUtil>=1.4.0
+
+# Provides the "distutils" shim GPUtil imports on Python 3.12+ (stdlib removed it)
+setuptools>=69.0.0

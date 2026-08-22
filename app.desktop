@@ -1,6 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=Analog Clock
-Exec=clock
+# Launch the maintained source with the project venv (PyQt5 + deps live there).
+# NOTE: any PyInstaller build made before Aug 2026 predates the Wayland/Xcb
+# drag fix -- rebuild with pyinstaller clock.spec if you need a packaged binary.
+Exec=/home/dell/Documents/git_projects/analog-clock/venv/bin/python /home/dell/Documents/git_projects/analog-clock/clock.py
+Path=/home/dell/Documents/git_projects/analog-clock
 Icon=clock
 Categories=Utility;

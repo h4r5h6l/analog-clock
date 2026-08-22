@@ -36,7 +36,7 @@ sudo apt-get install -y python3.12 python3.12-venv python3.12-dev build-essentia
 sudo dnf install -y python3.12 python3.12-devel gcc
 
 # For Arch-based systems
-sudo pacman -S python tk
+sudo pacman -S --needed python base-devel
 ```
 
 ### Step 2: Navigate to Project Directory
@@ -139,7 +139,7 @@ nohup venv/bin/python clock.py > clock.log 2>&1 &
   - **Bat**: Battery percentage and power state (AC/BAT or --% if unavailable)
 
 ### Color Adjustment
-The clock automatically adjusts hand/number colors for optimal visibility:
+The clock automatically adjusts hand and tick-mark colors for optimal visibility:
 - **Dark Background**: White clock elements
 - **Light Background**: Black clock elements
 - Color transitions smoothly over 0.35 seconds
@@ -236,6 +236,7 @@ The clock will now start automatically when you log into your desktop environmen
 ```
 analog-clock/
 ├── clock.py              # Main application file
+├── background_sheet.py   # Helper for drawing translucent panels
 ├── requirements.txt      # Python dependencies
 ├── README.md             # This file
 └── venv/                 # Virtual environment directory
@@ -298,4 +299,4 @@ For issues with:
 
 ---
 
-**Last Updated**: 2026-06-13
+**Last Updated**: 2026-08-22
