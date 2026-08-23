@@ -197,6 +197,14 @@ systems; if it shows `--%`, no battery is reported on your system.
 
 The application uses GPUtil to monitor NVIDIA GPUs. If GPUtil is not installed or your system doesn't have an NVIDIA GPU, the GPU and VRAM sections will display "N/A". The application will still work normally with CPU and RAM monitoring.
 
+### `QFont::fromString Invalid description 'Noto Sans,...'` in the terminal
+
+This message is emitted by your **desktop environment's Qt theme plugin**
+(GNOME/KDE/qt5ct) while it parses the system font record at startup — not by
+this application (the codebase contains no font-string parsing). It is
+harmless: the bundled Noto Sans takes precedence for all app text anyway.
+Per project decision we leave desktop theme integration untouched.
+
 ## Creating a Desktop Launcher (Optional)
 
 A ready-made launcher ships with the project as `analog_clock.desktop`. To install it:
@@ -250,6 +258,7 @@ analog-clock/
 │   ├── drawing.py             # Pure QPainter drawing routines (widget-free)
 │   ├── background_sheet.py    # Translucent rounded-sheet helper
 │   ├── settings_dialog.py     # Settings dialog with live preview
+│   ├── fonts/                 # Bundled Noto Sans Regular/Bold (OFL) + license
 │   └── analog_clock_widget.py # AnalogClock(QWidget): timers, drag/move, paint glue
 └── venv/                      # Virtual environment directory (gitignored)
 ```
@@ -275,6 +284,16 @@ This file makes it easy to replicate the development environment or share the pr
 - **PyQt5.QtWidgets**: GUI components (QApplication, QWidget)
 - **PyQt5.QtCore**: Core functionality (QTimer, signals)
 - **PyQt5.QtGui**: Graphics (QPainter, colors, fonts)
+
+### Fonts
+
+The app bundles **Noto Sans Regular/Bold** (SIL Open Font License — see
+`analogclock/fonts/OFL.txt`) and registers it at startup via
+`QFontDatabase.addApplicationFont`, so text renders identically on every
+machine regardless of installed fonts. The hardware panel's size is measured
+from the loaded font with `QFontMetrics` (`drawing.measure_specs_panel`), so
+even if font registration ever fails and the system default is used, labels
+still fit instead of clipping.
 
 ### System Monitoring
 - **psutil**: Cross-platform library for retrieving information on running processes and system utilization (CPU, RAM)

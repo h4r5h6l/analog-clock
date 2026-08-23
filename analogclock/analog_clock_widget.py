@@ -10,12 +10,12 @@ and hardware controllers.
 import sys
 
 from PyQt5.QtCore import QPoint, Qt, QTimer
-from PyQt5.QtGui import QColor, QPainter
+from PyQt5.QtGui import QColor, QFont, QPainter
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 
 from analogclock import config
 from analogclock.colors import COLOR_ROLES, ColorController
-from analogclock.drawing import draw_clock, draw_hardware_specs
+from analogclock.drawing import draw_clock, draw_hardware_specs, measure_specs_panel
 from analogclock.hardware import HardwareMonitor
 from analogclock.settings_dialog import SettingsDialog
 from analogclock.timezones import DEFAULT_BOTTOM_TZ, DEFAULT_TOP_TZ, TimezonePair, _safe_zoneinfo
@@ -52,7 +52,28 @@ class AnalogClock(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         # keep the clock window at 60% opacity for consistent transparency
         self.setWindowOpacity(0.60)
-        self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
+        # Size the hardware specs panel (and thus the window) from the real
+        # font metrics so every label fits on any machine's fonts/scaling.
+        specs_font = QFont(self.font())
+        specs_font.setPointSize(10)
+        specs_font.setBold(True)
+        specs_metrics = measure_specs_panel(specs_font)
+        self.specs_panel_width = max(
+            self.HARDWARE_PANEL_WIDTH, round(specs_metrics["panel_width"])
+        )
+        self.specs_panel_height = max(
+            self.HARDWARE_PANEL_HEIGHT, round(specs_metrics["panel_height"])
+        )
+        self._specs_line_height = specs_metrics["line_height"]
+        self._specs_padding = specs_metrics["padding"]
+        self.window_width = (
+            self.CLOCK_SIZE
+            + (self.HORIZONTAL_PADDING * 2)
+            + self.SIDE_SLIDER_SPACE
+            + self.SPECS_PANEL_SPACING
+            + self.specs_panel_width
+        )
+        self.setFixedSize(self.window_width, self.WINDOW_HEIGHT)
 
         # ---- Extracted controllers --------------------------------------
         self.hardware = HardwareMonitor()
@@ -89,7 +110,7 @@ class AnalogClock(QWidget):
         # reserve a smaller top control area so the clock is closer to the cursor
         self.top_control_offset = 12
         # enlarge window height to include the top control area
-        self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT + self.top_control_offset)
+        self.setFixedSize(self.window_width, self.WINDOW_HEIGHT + self.top_control_offset)
         # Update hardware stats immediately
         self.hardware.poll()
         # Free-drag mode: restore the last saved position; only fall back to
@@ -339,10 +360,12 @@ class AnalogClock(QWidget):
             painter,
             panel_x,
             panel_y,
-            self.HARDWARE_PANEL_WIDTH,
-            self.HARDWARE_PANEL_HEIGHT,
+            self.specs_panel_width,
+            self.specs_panel_height,
             self.hardware.stats_snapshot(),
             palette,
+            line_height=self._specs_line_height,
+            padding=self._specs_padding,
         )
 
     # ---- Settings dialog ------------------------------------------------------

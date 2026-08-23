@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('analogclock/fonts', 'analogclock/fonts')],
     hiddenimports=[
         'analogclock',
         'analogclock.bootstrap',

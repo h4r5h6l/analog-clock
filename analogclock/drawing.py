@@ -9,7 +9,7 @@ All geometry/scale math lives here.
 import math
 
 from PyQt5.QtCore import QRectF, Qt
-from PyQt5.QtGui import QBrush, QColor, QPen
+from PyQt5.QtGui import QBrush, QColor, QFontMetrics, QPen
 
 from analogclock.background_sheet import draw_background_sheet
 
@@ -19,6 +19,33 @@ SHEET_PADDING = 8
 SHEET_RADIUS = 12
 LINE_HEIGHT = 19
 TEXT_PADDING = 6
+
+
+def measure_specs_panel(font):
+    """Size the hardware specs panel from real font metrics.
+
+    Measures the widest label the panel can ever render with ``font`` and
+    returns a dict of panel_width / panel_height / line_height / padding,
+    so text never clips regardless of the machine's font family, point size,
+    or DPI scaling. Callers apply their own minimum floors.
+    """
+    metrics = QFontMetrics(font)
+    labels = (
+        "CPU: 100%",
+        "RAM: 100%",
+        "GPU: 100%",
+        "VRAM: 100%",
+        " BAT 100%",
+    )
+    widest = max(metrics.horizontalAdvance(label) for label in labels)
+    line_height = max(LINE_HEIGHT, metrics.height() + 4)
+    padding = TEXT_PADDING
+    return {
+        "panel_width": widest + padding * 2 + 4,
+        "panel_height": padding * 2 + line_height * 5,
+        "line_height": line_height,
+        "padding": padding,
+    }
 
 
 def draw_outlined_text(painter, rect, alignment, text, fill_color, border_color):
@@ -144,7 +171,8 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
     painter.setBrush(Qt.NoBrush)
 
 
-def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors):
+def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors,
+                        line_height=None, padding=None):
     """Draw the rounded specs sheet plus CPU/RAM/GPU/VRAM/battery text.
 
     ``stats`` comes from hardware.HardwareMonitor.stats_snapshot();
@@ -174,8 +202,8 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
     specs_font.setBold(True)
     painter.setFont(specs_font)
 
-    padding = TEXT_PADDING
-    line_height = LINE_HEIGHT
+    padding = TEXT_PADDING if padding is None else int(padding)
+    line_height = LINE_HEIGHT if line_height is None else int(line_height)
 
     # Prepare specs text
     cpu_text = f"CPU: {stats['cpu_percent']:.0f}%"
