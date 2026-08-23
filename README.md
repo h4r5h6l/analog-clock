@@ -8,6 +8,7 @@ A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog cl
 - **Custom Color Palette**: Pick fixed colors for the clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet
 - **Settings Dialog**: Right-click the clock to change timezones and colors
 - **Resizable Clock & Text**: Change the clock face size and the specs font size in the settings dialog; both stacked clocks and the hardware-panel background sheet resize together, and the sizes are saved between restarts
+- **Adjustable Opacity**: A slider makes just the clock faces and the hardware-panel background sheet translucent (hands, ticks, borders and specs text stay sharp); the value is saved and restored on the next launch
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
 - **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
@@ -147,6 +148,9 @@ The clock always uses your fixed colors, chosen in the settings dialog (a live p
 
 ### Display Size
 Use the **Display size** controls in the settings dialog to set the clock face size and the specs (hardware-panel) font size. Increasing the clock size grows **both** stacked clocks and the hardware-panel background sheet together; the chosen sizes are saved to `window_position.json` alongside your colors and timezones and restored on the next launch.
+
+### Opacity
+The **Opacity** slider in the settings dialog controls the translucency of just the clock faces and the hardware-panel background sheet. Hands, ticks, borders and specs text remain fully opaque, so the clocks stay legible while the face and sheet sink into the background. The value is saved to `window_position.json` with the other display settings and is restored on the next launch.
 
 ## Troubleshooting
 

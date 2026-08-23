@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -56,6 +57,7 @@ class _AppearancePreview(QWidget):
     CLOCK_SIZE = 130
     MAX_PREVIEW_CLOCK_SIZE = 170
     DEFAULT_FONT_SIZE = 10
+    DEFAULT_OPACITY = 0.60
     PANEL_W_RATIO = 90 / 160
     PANEL_H_RATIO = 110 / 160
     MARGIN = 16
@@ -66,9 +68,10 @@ class _AppearancePreview(QWidget):
         self.manual_palette = {}
         self._clock_size = self.CLOCK_SIZE
         self._font_size = self.DEFAULT_FONT_SIZE
+        self._opacity = self.DEFAULT_OPACITY
         self._apply_size()
 
-    def set_state(self, manual_palette, clock_size=None, font_size=None):
+    def set_state(self, manual_palette, clock_size=None, font_size=None, opacity=None):
         self.manual_palette = dict(manual_palette)
         if clock_size is not None:
             self._clock_size = max(
@@ -76,6 +79,8 @@ class _AppearancePreview(QWidget):
             )
         if font_size is not None:
             self._font_size = int(font_size)
+        if opacity is not None:
+            self._opacity = max(0.05, min(1.0, float(opacity)))
         self._apply_size()
         self.update()
 
@@ -102,6 +107,7 @@ class _AppearancePreview(QWidget):
                 datetime.now(),
                 float(self._clock_size),
                 colors,
+                opacity=self._opacity,
             )
             draw_hardware_specs(
                 painter,
@@ -112,6 +118,7 @@ class _AppearancePreview(QWidget):
                 _STUB_STATS,
                 colors,
                 font_size=self._font_size,
+                opacity=self._opacity,
             )
         finally:
             painter.end()
@@ -137,6 +144,7 @@ class SettingsDialog(QDialog):
         # appearance settings.
         self._chosen_clock_size = int(clock.CLOCK_SIZE)
         self._chosen_font_size = int(clock.font_size)
+        self._chosen_opacity = float(clock.opacity)
 
         layout = QVBoxLayout(self)
 
@@ -181,6 +189,18 @@ class SettingsDialog(QDialog):
         self.clock_size_spin.valueChanged.connect(self._on_size_changed)
         self.font_size_spin.valueChanged.connect(self._on_size_changed)
         layout.addWidget(size_group)
+
+        opacity_group = QGroupBox("Opacity (face & sheet)", self)
+        opacity_layout = QHBoxLayout(opacity_group)
+        self.opacity_slider = QSlider(Qt.Horizontal, opacity_group)
+        self.opacity_slider.setRange(20, 100)
+        self.opacity_slider.setSingleStep(5)
+        self.opacity_slider.setValue(round(self._chosen_opacity * 100))
+        self.opacity_pct_label = QLabel(self._format_pct(self._chosen_opacity))
+        self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
+        opacity_layout.addWidget(self.opacity_pct_label)
+        opacity_layout.addWidget(self.opacity_slider)
+        layout.addWidget(opacity_group)
 
         preview_group = QGroupBox("Live preview", self)
         preview_layout = QVBoxLayout(preview_group)
@@ -244,12 +264,22 @@ class SettingsDialog(QDialog):
             self._chosen_colors,
             clock_size=self._chosen_clock_size,
             font_size=self._chosen_font_size,
+            opacity=self._chosen_opacity,
         )
 
     def _on_size_changed(self):
         self._chosen_clock_size = self.clock_size_spin.value()
         self._chosen_font_size = self.font_size_spin.value()
         self.refresh_preview()
+
+    def _on_opacity_changed(self):
+        self._chosen_opacity = self.opacity_slider.value() / 100.0
+        self.opacity_pct_label.setText(self._format_pct(self._chosen_opacity))
+        self.refresh_preview()
+
+    @staticmethod
+    def _format_pct(opacity):
+        return f"{round(opacity * 100)}%"
 
     # -- values read back by AnalogClock.open_settings_dialog --------------
 
@@ -261,6 +291,9 @@ class SettingsDialog(QDialog):
 
     def chosen_font_size(self):
         return self.font_size_spin.value()
+
+    def chosen_opacity(self):
+        return self.opacity_slider.value() / 100.0
 
     def top_timezone_text(self):
         return self.top_tz_combo.currentText().strip()
