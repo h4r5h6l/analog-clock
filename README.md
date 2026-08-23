@@ -5,7 +5,7 @@ A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog cl
 ## Features
 
 - **Dual Timezone Display**: Two stacked analog clocks, each with a configurable IANA timezone (defaults: Berlin and Mumbai)
-- **Custom Color Palette**: Pick fixed face/hand/tick/border colors
+- **Custom Color Palette**: Pick fixed colors for the clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet
 - **Settings Dialog**: Right-click the clock to change timezones and colors
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
@@ -142,7 +142,7 @@ nohup venv/bin/python main.py > clock.log 2>&1 &
   - **Bat**: Battery percentage and power state (AC/BAT or --% if unavailable)
 
 ### Custom Colors
-The clock always uses your fixed face/hand/tick/border colors, chosen in the settings dialog (a live preview shows the result). Defaults: white face and border with black hands and ticks.
+The clock always uses your fixed colors, chosen in the settings dialog (a live preview shows the result): clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet. Defaults: white face, border, and sheet with black hands, ticks, and text.
 
 ## Troubleshooting
 

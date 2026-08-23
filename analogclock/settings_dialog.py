@@ -66,6 +66,8 @@ class SettingsDialog(QDialog):
         "hand_color": "Hands",
         "tick_color": "Ticks",
         "border_color": "Border",
+        "text_color": "Text",
+        "sheet_color": "Sheet",
     }
 
     def __init__(self, clock, parent=None):

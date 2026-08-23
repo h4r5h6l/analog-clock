@@ -1,20 +1,31 @@
 """Color state for the fixed manual palette.
 
-Owns everything color-related that used to live on AnalogClock: the four
-configurable roles and the resolved per-frame palette handed to
+Owns everything color-related that used to live on AnalogClock: the
+configurable color roles (clock face, hands, ticks, border, specs text,
+specs sheet) and the resolved per-frame palette handed to
 analogclock.drawing.
 """
 
 from PyQt5.QtGui import QColor
 
-# The four manually configurable color roles.
-COLOR_ROLES = ("face_color", "hand_color", "tick_color", "border_color")
+# The manually configurable color roles: four clock-face roles plus the
+# hardware-panel text and its background sheet.
+COLOR_ROLES = (
+    "face_color",
+    "hand_color",
+    "tick_color",
+    "border_color",
+    "text_color",
+    "sheet_color",
+)
 
 DEFAULT_MANUAL_COLORS = {
     "face_color": QColor(255, 255, 255),   # clock face fill
     "hand_color": QColor(0, 0, 0),         # hour/minute/second hands + hub
     "tick_color": QColor(0, 0, 0),         # tick marks around the face
     "border_color": QColor(255, 255, 255), # outlines, halos, hub ring
+    "text_color": QColor(0, 0, 0),         # CPU/RAM/GPU/VRAM/battery text
+    "sheet_color": QColor(255, 255, 255),  # hardware panel background sheet
 }
 
 
@@ -29,12 +40,10 @@ class ColorController:
     # ---- Per-frame resolution ----------------------------------------------
 
     def resolved_palette(self):
-        """Resolve the four roles for this frame from the fixed palette."""
+        """Resolve every color role for this frame from the fixed palette."""
         return {
-            "hand_color": QColor(self.manual_colors.get("hand_color", QColor(0, 0, 0))),
-            "tick_color": QColor(self.manual_colors.get("tick_color", QColor(0, 0, 0))),
-            "face_color": QColor(self.manual_colors.get("face_color", QColor(255, 255, 255))),
-            "border_color": QColor(self.manual_colors.get("border_color", QColor(255, 255, 255))),
+            role: QColor(self.manual_colors.get(role, default))
+            for role, default in DEFAULT_MANUAL_COLORS.items()
         }
 
     def color_for(self, role):
