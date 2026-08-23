@@ -1,17 +1,20 @@
 # Analog Clock Application
 
-A desktop analog clock application displaying multiple timezones with intelligent color contrast adjustment. Built with PyQt5, this lightweight application features two synchronized analog clocks showing Berlin (Europe/Berlin) and Mumbai (Asia/Kolkata) timezones.
+A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog clocks show configurable timezones (defaults: Europe/Berlin and Asia/Kolkata) next to a live hardware stats panel, with automatic contrast so the clock stays readable on any wallpaper.
 
 ## Features
 
-- **Dual Timezone Display**: Shows Berlin and Mumbai time zones simultaneously
-- **Auto Color Contrast**: Automatically adjusts clock color (black/white) based on background brightness
-- **Always-on-Top Toggle**: Double-click to toggle window always-on-top mode
+- **Dual Timezone Display**: Two stacked analog clocks, each with a configurable IANA timezone (defaults: Berlin and Mumbai)
+- **Auto Color Contrast**: Automatically adjusts clock colors (black/white) based on the brightness of the wallpaper behind the window
+- **Custom Color Palette**: Pick fixed face/hand/tick/border colors instead of auto contrast
+- **Settings Dialog**: Right-click the clock to change timezones, colors, and contrast mode
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
-- **Battery Indicator**: Displays current battery percentage and charging status in the hardware stats panel
-- **Draggable**: Click and drag horizontally to reposition at screen bottom
-- **Transparent Background**: 60% opacity for unobtrusive integration with desktop
-- **Smooth Animations**: Color transitions and frame-based rendering for smooth updates
+- **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
+- **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
+- **Always on Top**: Frameless tool window that stays above other windows and re-shows itself if minimized
+- **Transparent Background**: 60% opacity for unobtrusive integration with the desktop
+- **Smooth Animations**: Eased color transitions; repaints only when something actually changes
+- **Wayland-Safe**: Routes through XWayland (xcb) automatically so positioning, dragging, and screen sampling work on both X11 and Wayland
 
 ## Requirements
 
@@ -30,10 +33,10 @@ Before creating a virtual environment, ensure you have the required system packa
 ```bash
 # For Debian/Ubuntu-based systems
 sudo apt-get update
-sudo apt-get install -y python3.12 python3.12-venv python3.12-dev build-essential
+sudo apt-get install -y python3 python3-venv python3-dev build-essential
 
 # For Fedora/RHEL-based systems
-sudo dnf install -y python3.12 python3.12-devel gcc
+sudo dnf install -y python3 python3-devel gcc
 
 # For Arch-based systems
 sudo pacman -S --needed python base-devel
@@ -50,8 +53,10 @@ cd /path/to/analog-clock
 Create an isolated Python environment to avoid conflicts with system packages:
 
 ```bash
-python3.12 -m venv venv
+python3 -m venv venv
 ```
+
+Any Python ≥ 3.12 works; the development environment for this project currently uses Python 3.14.
 
 This will create a `venv/` directory containing the isolated Python environment.
 
@@ -99,10 +104,10 @@ python3 -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 installed suc
 
 ### Standard Execution
 
-With the virtual environment activated:
+With the virtual environment activated (run from the project root):
 
 ```bash
-python clock.py
+python main.py
 ```
 
 ### Running with Full Path (Without Activation)
@@ -110,7 +115,7 @@ python clock.py
 If you don't want to activate the venv manually:
 
 ```bash
-./venv/bin/python clock.py
+./venv/bin/python main.py
 ```
 
 ### Running in Background
@@ -118,19 +123,18 @@ If you don't want to activate the venv manually:
 To run the clock in the background and free up your terminal:
 
 ```bash
-nohup venv/bin/python clock.py > clock.log 2>&1 &
+nohup venv/bin/python main.py > clock.log 2>&1 &
 ```
 
 ## Usage Instructions
 
 ### Window Navigation
-- **Drag**: Click and drag horizontally to move the clock left/right (stays at screen bottom)
-- **Double-Click**: Toggle always-on-top window mode
-- Close using your window manager's close button
+- **Drag**: Left-click and drag to move the window anywhere on screen; the position is saved automatically (debounced) and restored on the next launch
+- **Right-Click**: Open the settings dialog (contrast mode, fixed colors, both timezones) — it opens beside the clock (right side, or left if there is no room) and stays above it
+- The window is always-on-top and re-shows itself if minimized; it has no title bar or close button
 
 ### Display Information
-- **Top Clock**: Shows current time in Berlin timezone (Europe/Berlin)
-- **Bottom Clock**: Shows current time in Mumbai timezone (Asia/Kolkata)
+- **Top Clock / Bottom Clock**: Each shows the timezone chosen in the settings dialog (defaults: Europe/Berlin and Asia/Kolkata; invalid names fall back to system local time)
 - **Hardware Stats Panel**: Displayed on the right side of the clocks, vertically centered (updates every 2 seconds)
   - **CPU**: Current CPU usage percentage
   - **RAM**: Current RAM usage percentage
@@ -139,10 +143,11 @@ nohup venv/bin/python clock.py > clock.log 2>&1 &
   - **Bat**: Battery percentage and power state (AC/BAT or --% if unavailable)
 
 ### Color Adjustment
-The clock automatically adjusts hand and tick-mark colors for optimal visibility:
+In automatic contrast mode the clock adjusts its colors for optimal visibility:
 - **Dark Background**: White clock elements
 - **Light Background**: Black clock elements
-- Color transitions smoothly over 0.35 seconds
+- Colors transition smoothly over 0.35 seconds
+- Turn auto contrast off in the settings dialog to use your own fixed face/hand/tick/border colors (a live preview shows the result)
 
 ## Troubleshooting
 
@@ -165,7 +170,7 @@ If the virtual environment doesn't work, recreate it:
 
 ```bash
 rm -rf venv
-python3.12 -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install PyQt5
@@ -173,16 +178,20 @@ pip install PyQt5
 
 ### Display Server Issues
 
-If the application won't display (especially on remote systems):
+The app routes itself through XWayland (xcb) automatically via
+`analogclock/bootstrap.py` whenever an X display is available. If it still
+won't display (e.g. on remote/headless systems), try:
 
 ```bash
 export QT_QPA_PLATFORM=xcb
-python clock.py
+python main.py
 ```
 
 ### Battery Indicator Not Working
 
-The battery indicator reads from `/sys/class/power_supply/`. This feature works on most modern Linux systems. If it doesn't display, it's typically not available on your system.
+Battery info comes from `psutil.sensors_battery()` first, falling back to a
+direct read of `/sys/class/power_supply/`. This works on most modern Linux
+systems; if it shows `--%`, no battery is reported on your system.
 
 ### GPU/VRAM Monitoring Not Available
 
@@ -190,24 +199,15 @@ The application uses GPUtil to monitor NVIDIA GPUs. If GPUtil is not installed o
 
 ## Creating a Desktop Launcher (Optional)
 
-To create a desktop shortcut for easy access:
+A ready-made launcher ships with the project as `analog_clock.desktop`. To install it:
 
-1. Create a `.desktop` file:
+1. Copy it into your applications directory:
 
 ```bash
-cat > ~/.local/share/applications/analog-clock.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Analog Clock
-Comment=Dual timezone analog clock with battery indicator
-Exec=/home/YOUR_USERNAME/Documents/gitProjects/analog-clock/venv/bin/python /home/YOUR_USERNAME/Documents/gitProjects/analog-clock/clock.py
-Icon=clock
-Terminal=false
-Categories=Utility;
-EOF
+cp analog_clock.desktop ~/.local/share/applications/analog-clock.desktop
 ```
 
-Replace `YOUR_USERNAME` with your actual Linux username.
+2. If your checkout does not live at `/home/YOUR_USERNAME/Documents/git_projects/analog-clock`, edit the installed copy and fix the `Exec` and `Path` lines to point at your `venv/bin/python` and `main.py`.
 
 2. Make it executable and update the desktop database:
 
@@ -235,15 +235,23 @@ The clock will now start automatically when you log into your desktop environmen
 
 ```
 analog-clock/
-├── clock.py              # Main application file
-├── background_sheet.py   # Helper for drawing translucent panels
-├── requirements.txt      # Python dependencies
-├── README.md             # This file
-└── venv/                 # Virtual environment directory
-    ├── bin/              # Executables (python, pip)
-    ├── lib/              # Installed packages
-    ├── include/          # Header files
-    └── pyvenv.cfg        # Virtual environment config
+├── main.py                    # Entry point: platform workarounds, QApplication, exec_()
+├── clock.spec                 # PyInstaller spec (builds from main.py)
+├── analog_clock.desktop       # App-menu launcher
+├── requirements.txt           # Python dependencies
+├── README.md                  # This file
+├── analogclock/               # Application package
+│   ├── __init__.py
+│   ├── bootstrap.py           # Wayland/xcb QT_QPA_PLATFORM workaround
+│   ├── config.py              # JSON persistence (~/.config/analog-clock/)
+│   ├── colors.py              # ColorController: auto contrast + manual palette
+│   ├── timezones.py           # TimezonePair + safe zoneinfo lookups + defaults
+│   ├── hardware.py            # HardwareMonitor: CPU/RAM/GPU/VRAM/battery
+│   ├── drawing.py             # Pure QPainter drawing routines (widget-free)
+│   ├── background_sheet.py    # Translucent rounded-sheet helper
+│   ├── settings_dialog.py     # Settings dialog with live preview
+│   └── analog_clock_widget.py # AnalogClock(QWidget): timers, drag/move, paint glue
+└── venv/                      # Virtual environment directory (gitignored)
 ```
 
 ### requirements.txt
@@ -253,7 +261,10 @@ The `requirements.txt` file contains:
 PyQt5>=5.15.0
 psutil>=5.9.0
 GPUtil>=1.4.0
+setuptools>=69.0.0
 ```
+
+(`setuptools` provides the `distutils` shim that GPUtil imports on Python 3.12+.)
 
 This file makes it easy to replicate the development environment or share the project with others.
 
@@ -279,7 +290,7 @@ This file makes it easy to replicate the development environment or share the pr
 
 ## Performance Notes
 
-- **Refresh Rate**: 60 FPS for smooth animations
+- **Animation Timer**: ticks at ~60 Hz but repaints only while a color transition is actually animating
 - **Clock Update**: Every 1 second
 - **Hardware Stats Update**: Every 2 seconds
 - **Contrast Check**: Every 0.2 seconds (efficient background sampling)
@@ -299,4 +310,4 @@ For issues with:
 
 ---
 
-**Last Updated**: 2026-08-22
+**Last Updated**: 2026-08-23

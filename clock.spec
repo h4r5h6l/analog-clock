@@ -2,11 +2,22 @@
 
 
 a = Analysis(
-    ['clock.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'analogclock',
+        'analogclock.bootstrap',
+        'analogclock.config',
+        'analogclock.colors',
+        'analogclock.timezones',
+        'analogclock.hardware',
+        'analogclock.background_sheet',
+        'analogclock.drawing',
+        'analogclock.settings_dialog',
+        'analogclock.analog_clock_widget',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
