@@ -53,11 +53,12 @@ def draw_outlined_hand(painter, center_x, center_y, length, angle, width, fill_c
     painter.drawEllipse(QRectF(end_x - dot_radius, end_y - dot_radius, dot_radius * 2, dot_radius * 2))
 
 
-def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
+def draw_clock(painter, top_left_x, top_left_y, now, size, colors, opacity=1.0):
     """Draw one clock face.
 
     ``colors`` maps the four COLOR_ROLES entries to resolved QColors for
     this frame (see colors.ColorController.resolved_palette).
+    ``opacity`` (0.0..1.0) sets the translucency of the face fill only.
     """
     scale = size / 200
     center_x = top_left_x + size / 2
@@ -74,7 +75,9 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
     tick_color = QColor(colors["tick_color"])
 
     # Soft translucent face fill only -- no hard outline ring, for a
-    # minimal floating look.
+    # minimal floating look. Opacity makes just the face see-through;
+    # hands, ticks and borders stay fully opaque.
+    face_color.setAlpha(max(0, min(255, round(255 * opacity))))
     painter.setPen(Qt.NoPen)
     painter.setBrush(QBrush(face_color))
     painter.drawEllipse(int(top_left_x + margin), int(top_left_y + margin), int(face_size), int(face_size))
@@ -144,7 +147,7 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
     painter.setBrush(Qt.NoBrush)
 
 
-def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10):
+def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10, opacity=SHEET_OPACITY):
     """Draw the rounded specs sheet plus CPU/RAM/GPU/VRAM/battery text.
 
     ``stats`` comes from hardware.HardwareMonitor.stats_snapshot();
@@ -162,7 +165,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
     sheet_y = panel_y - SHEET_PADDING
     sheet_w = panel_width + (SHEET_PADDING * 2)
     sheet_h = panel_height + (SHEET_PADDING * 2)
-    draw_background_sheet(painter, sheet_x, sheet_y, sheet_w, sheet_h, sheet_color, SHEET_OPACITY, radius=SHEET_RADIUS)
+    draw_background_sheet(painter, sheet_x, sheet_y, sheet_w, sheet_h, sheet_color, opacity, radius=SHEET_RADIUS)
 
     # Set up font for specs text
     specs_font = painter.font()

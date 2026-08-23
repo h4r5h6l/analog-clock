@@ -92,6 +92,11 @@ class AnalogClock(QWidget):
     DEFAULT_FONT_SIZE = 10
     MIN_FONT_SIZE = 6
     MAX_FONT_SIZE = 32
+    # Translucency of the clock face and the hardware-panel background sheet
+    # (hands, ticks, text and borders stay fully opaque). Slider is in percent.
+    DEFAULT_OPACITY = 0.60
+    MIN_OPACITY = 0.20
+    MAX_OPACITY = 1.0
     CLOCK_SIZE = 160
     # smaller gap between stacked clocks to bring faces closer together
     CLOCK_SPACING = 6
@@ -127,8 +132,10 @@ class AnalogClock(QWidget):
         self.always_on_top = True
         self.apply_always_on_top_flags()
         self.setAttribute(Qt.WA_TranslucentBackground)
-        # keep the clock window at 60% opacity for consistent transparency
-        self.setWindowOpacity(0.60)
+        # Translucency applied to the clock face and the hardware-panel sheet
+        # (not the whole window, so hands/ticks/text stay sharp). Controlled by
+        # the settings dialog opacity slider; defaults to the prior 60%.
+        self.opacity = self.DEFAULT_OPACITY
         self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
 
         # Grid snapping: disabled by default so existing saved positions are
@@ -225,6 +232,11 @@ class AnalogClock(QWidget):
         self._apply_geometry()
         self.update()
 
+    def apply_opacity(self, opacity):
+        """Apply face/sheet opacity (0.0..1.0) from the settings dialog."""
+        self.opacity = max(self.MIN_OPACITY, min(self.MAX_OPACITY, float(opacity)))
+        self.update()
+
     # ---- Window flags / visibility -----------------------------------------
 
     def apply_always_on_top_flags(self):
@@ -296,6 +308,7 @@ class AnalogClock(QWidget):
             "font_size": int(self.font_size),
             "snap_to_grid": bool(self.snap_to_grid),
             "grid_spacing": int(self.grid_spacing),
+            "opacity": round(self.opacity, 3),
         }
         config.save_window_position(payload)
 
@@ -363,6 +376,12 @@ class AnalogClock(QWidget):
             self.grid_spacing = max(
                 self.MIN_GRID_SPACING,
                 min(self.MAX_GRID_SPACING, saved_grid),
+            )
+        # Optional opacity -- tolerated missing on older files.
+        saved_opacity = data.get("opacity")
+        if isinstance(saved_opacity, (int, float)):
+            self.opacity = max(
+                self.MIN_OPACITY, min(self.MAX_OPACITY, float(saved_opacity))
             )
         self._apply_geometry()
 
@@ -516,8 +535,9 @@ class AnalogClock(QWidget):
 
         palette = self.colors.resolved_palette()
 
-        # Draw clocks and specs content
-        draw_clock(painter, clocks_x, top_y, top_now, self.CLOCK_SIZE, palette)
+        # Draw clocks and specs content. Opacity makes only the faces (and the
+        # hardware sheet) translucent; hands, ticks and borders stay opaque.
+        draw_clock(painter, clocks_x, top_y, top_now, self.CLOCK_SIZE, palette, opacity=self.opacity)
         draw_clock(
             painter,
             clocks_x,
@@ -525,6 +545,7 @@ class AnalogClock(QWidget):
             bottom_now,
             self.CLOCK_SIZE,
             palette,
+            opacity=self.opacity,
         )
 
         # Hardware specs panel (positioned to the right of clocks, vertically
@@ -540,6 +561,7 @@ class AnalogClock(QWidget):
             self.hardware.stats_snapshot(),
             palette,
             font_size=self.font_size,
+            opacity=self.opacity,
         )
 
     # ---- Settings dialog ------------------------------------------------------
@@ -616,6 +638,7 @@ class AnalogClock(QWidget):
             self.apply_grid_settings(
                 dialog.grid_snap_enabled(), dialog.grid_spacing()
             )
+            self.apply_opacity(dialog.chosen_opacity())
             self.update()
             # Single config write for the whole applied change set.
             self.save_window_position()
