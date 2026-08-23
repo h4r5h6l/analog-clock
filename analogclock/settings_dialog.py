@@ -1,7 +1,8 @@
 """Modal settings panel: fixed clock colors and clock timezones.
 
-Includes a live single-clock preview rendered via drawing.draw_clock that
-reflects the currently chosen fixed colors. Color swatches are plain
+Includes a live preview rendered via drawing.draw_clock and draw_hardware_specs
+that reflects the currently chosen fixed colors for the clock face and the
+hardware stats panel (text and background sheet). Color swatches are plain
 QFrames instead of recolored buttons so they read as swatches rather than
 clickable controls.
 """
@@ -27,17 +28,34 @@ from PyQt5.QtWidgets import (
 )
 
 from analogclock.colors import COLOR_ROLES
-from analogclock.drawing import draw_clock
+from analogclock.drawing import draw_clock, draw_hardware_specs
+
+# Static stats shown in the settings preview so the hardware panel (its text
+# color and background sheet) is visible without polling live stats.
+_STUB_STATS = {
+    "cpu_percent": 66.6,
+    "ram_percent": 47.3,
+    "gpu_percent": 31.2,
+    "gpu_vram_percent": 42.1,
+    "gpu_available": True,
+    "battery_text": "BAT 77%",
+}
 
 
-class _ClockPreview(QWidget):
-    """One live clock face reflecting the dialog's current choices."""
+class _AppearancePreview(QWidget):
+    """Live preview of the clock and a hardware panel in the current colors."""
 
-    PREVIEW_SIZE = 150
+    CLOCK_SIZE = 130
+    PANEL_WIDTH = 90
+    PANEL_HEIGHT = 110
+    MARGIN = 16
+    GAP = 8
+    PREVIEW_WIDTH = MARGIN + CLOCK_SIZE + GAP + PANEL_WIDTH + MARGIN
+    PREVIEW_HEIGHT = MARGIN + CLOCK_SIZE + MARGIN
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(self.PREVIEW_SIZE + 16, self.PREVIEW_SIZE + 16)
+        self.setFixedSize(self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT)
         self.manual_palette = {}
 
     def set_state(self, manual_palette):
@@ -52,10 +70,24 @@ class _ClockPreview(QWidget):
                 role: QColor(self.manual_palette.get(role))
                 for role in COLOR_ROLES
             }
-            size = float(self.PREVIEW_SIZE)
-            x = (self.width() - size) / 2
-            y = (self.height() - size) / 2
-            draw_clock(painter, x, y, datetime.now(), size, colors)
+            clock_size = float(self.CLOCK_SIZE)
+            draw_clock(
+                painter,
+                float(self.MARGIN),
+                float(self.MARGIN),
+                datetime.now(),
+                clock_size,
+                colors,
+            )
+            draw_hardware_specs(
+                painter,
+                self.MARGIN + self.CLOCK_SIZE + self.GAP,
+                self.MARGIN,
+                self.PANEL_WIDTH,
+                self.PANEL_HEIGHT,
+                _STUB_STATS,
+                colors,
+            )
         finally:
             painter.end()
 
@@ -106,7 +138,7 @@ class SettingsDialog(QDialog):
 
         preview_group = QGroupBox("Live preview", self)
         preview_layout = QVBoxLayout(preview_group)
-        self.preview = _ClockPreview(preview_group)
+        self.preview = _AppearancePreview(preview_group)
         preview_layout.addWidget(self.preview, 0, Qt.AlignHCenter)
         layout.addWidget(preview_group)
 

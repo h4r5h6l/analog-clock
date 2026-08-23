@@ -8,8 +8,11 @@ analogclock.drawing.
 
 from PyQt5.QtGui import QColor
 
-# The manually configurable color roles: four clock-face roles plus the
-# hardware-panel text and its background sheet.
+# Manually configurable color roles. The first four paint the clock face;
+# text_color and sheet_color paint the hardware panel and are intentionally
+# independent of the hand/border colors so recoloring one does not bleed
+# into the other (previously the panel's sheet/text were inferred from the
+# hand color, which made recoloring the hands also flip the panel).
 COLOR_ROLES = (
     "face_color",
     "hand_color",
