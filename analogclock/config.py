@@ -1,7 +1,7 @@
 """JSON persistence: the single source of truth for everything written to disk.
 
-Stores the window x/y plus appearance settings (contrast mode, manual
-palette, both timezone names) so they survive restarts. The widget builds
+Stores the window x/y plus appearance settings (manual palette, both
+timezone names) so they survive restarts. The widget builds
 the payload dict and unpacks the restored dict; this module only does the
 file I/O.
 """

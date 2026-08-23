@@ -1,20 +1,20 @@
 # Analog Clock Application
 
-A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog clocks show configurable timezones (defaults: Europe/Berlin and Asia/Kolkata) next to a live hardware stats panel, with automatic contrast so the clock stays readable on any wallpaper.
+A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog clocks show configurable timezones (defaults: Europe/Berlin and Asia/Kolkata) next to a live hardware stats panel.
 
 ## Features
 
 - **Dual Timezone Display**: Two stacked analog clocks, each with a configurable IANA timezone (defaults: Berlin and Mumbai)
-- **Auto Color Contrast**: Automatically adjusts clock colors (black/white) based on the brightness of the wallpaper behind the window
-- **Custom Color Palette**: Pick fixed face/hand/tick/border colors instead of auto contrast
-- **Settings Dialog**: Right-click the clock to change timezones, colors, and contrast mode
+- **Custom Color Palette**: Pick fixed colors for the clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet
+- **Settings Dialog**: Right-click the clock to change timezones and colors
+- **Resizable Clock & Text**: Change the clock face size and the specs font size in the settings dialog; both stacked clocks and the hardware-panel background sheet resize together, and the sizes are saved between restarts
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
 - **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
 - **Always on Top**: Frameless tool window that stays above other windows and re-shows itself if minimized
 - **Transparent Background**: 60% opacity for unobtrusive integration with the desktop
-- **Smooth Animations**: Eased color transitions; repaints only when something actually changes
-- **Wayland-Safe**: Routes through XWayland (xcb) automatically so positioning, dragging, and screen sampling work on both X11 and Wayland
+- **Smooth Animations**: Repaints only when something actually changes
+- **Wayland-Safe**: Routes through XWayland (xcb) automatically so positioning and dragging work on both X11 and Wayland
 
 ## Requirements
 
@@ -130,7 +130,7 @@ nohup venv/bin/python main.py > clock.log 2>&1 &
 
 ### Window Navigation
 - **Drag**: Left-click and drag to move the window anywhere on screen; the position is saved automatically (debounced) and restored on the next launch
-- **Right-Click**: Open the settings dialog (contrast mode, fixed colors, both timezones) — it opens beside the clock (right side, or left if there is no room) and stays above it
+- **Right-Click**: Open the settings dialog (colors, timezones, and display sizes) — it opens beside the clock (right side, or left if there is no room) and stays above it
 - The window is always-on-top and re-shows itself if minimized; it has no title bar or close button
 
 ### Display Information
@@ -142,12 +142,11 @@ nohup venv/bin/python main.py > clock.log 2>&1 &
   - **VRAM**: Current GPU VRAM usage percentage (if GPU is available)
   - **Bat**: Battery percentage and power state (AC/BAT or --% if unavailable)
 
-### Color Adjustment
-In automatic contrast mode the clock adjusts its colors for optimal visibility:
-- **Dark Background**: White clock elements
-- **Light Background**: Black clock elements
-- Colors transition smoothly over 0.35 seconds
-- Turn auto contrast off in the settings dialog to use your own fixed face/hand/tick/border colors (a live preview shows the result)
+### Custom Colors
+The clock always uses your fixed colors, chosen in the settings dialog (a live preview shows the result): clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet. Defaults: white face, border, and sheet with black hands, ticks, and text.
+
+### Display Size
+Use the **Display size** controls in the settings dialog to set the clock face size and the specs (hardware-panel) font size. Increasing the clock size grows **both** stacked clocks and the hardware-panel background sheet together; the chosen sizes are saved to `window_position.json` alongside your colors and timezones and restored on the next launch.
 
 ## Troubleshooting
 
@@ -244,7 +243,7 @@ analog-clock/
 │   ├── __init__.py
 │   ├── bootstrap.py           # Wayland/xcb QT_QPA_PLATFORM workaround
 │   ├── config.py              # JSON persistence (~/.config/analog-clock/)
-│   ├── colors.py              # ColorController: auto contrast + manual palette
+│   ├── colors.py              # ColorController: manual color palette
 │   ├── timezones.py           # TimezonePair + safe zoneinfo lookups + defaults
 │   ├── hardware.py            # HardwareMonitor: CPU/RAM/GPU/VRAM/battery
 │   ├── drawing.py             # Pure QPainter drawing routines (widget-free)
@@ -290,10 +289,8 @@ This file makes it easy to replicate the development environment or share the pr
 
 ## Performance Notes
 
-- **Animation Timer**: ticks at ~60 Hz but repaints only while a color transition is actually animating
 - **Clock Update**: Every 1 second
 - **Hardware Stats Update**: Every 2 seconds
-- **Contrast Check**: Every 0.2 seconds (efficient background sampling)
 - **Memory Footprint**: Minimal (~30-50 MB)
 - **CPU Usage**: Low (mainly event-driven)
 

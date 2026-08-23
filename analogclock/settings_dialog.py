@@ -1,9 +1,10 @@
-"""Modal settings panel: contrast mode, fixed colors, clock timezones.
+"""Modal settings panel: fixed clock colors, timezones, and display sizes.
 
-Includes a live single-clock preview rendered via drawing.draw_clock that
-reflects either the automatic-contrast palette or the currently chosen
-fixed colors. Color swatches are plain QFrames instead of recolored
-buttons so they read as swatches rather than clickable controls.
+Includes a live preview rendered via drawing.draw_clock and draw_hardware_specs
+that reflects the currently chosen fixed colors for the clock face and the
+hardware stats panel (text and background sheet). Color swatches are plain
+QFrames instead of recolored buttons so they read as swatches rather than
+clickable controls.
 """
 
 from datetime import datetime
@@ -12,68 +13,106 @@ from zoneinfo import available_timezones
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
-    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFrame,
+    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from analogclock.colors import COLOR_ROLES
-from analogclock.drawing import draw_clock
+from analogclock.drawing import draw_clock, draw_hardware_specs
+
+# Static stats shown in the settings preview so the hardware panel (its text
+# color and background sheet) is visible without polling live stats.
+_STUB_STATS = {
+    "cpu_percent": 66.6,
+    "ram_percent": 47.3,
+    "gpu_percent": 31.2,
+    "gpu_vram_percent": 42.1,
+    "gpu_available": True,
+    "battery_text": "BAT 77%",
+}
 
 
-class _ClockPreview(QWidget):
-    """One live clock face reflecting the dialog's current choices."""
+class _AppearancePreview(QWidget):
+    """Live preview of the clock and a hardware panel in the current colors.
 
-    PREVIEW_SIZE = 150
+    The preview scales its clock face and hardware panel with the chosen clock
+    size (so the background sheet grows with it), and the specs font tracks the
+    chosen font size. The preview clock is capped so the dialog stays compact
+    while still reflecting the scaling direction.
+    """
+
+    CLOCK_SIZE = 130
+    MAX_PREVIEW_CLOCK_SIZE = 170
+    DEFAULT_FONT_SIZE = 10
+    PANEL_W_RATIO = 90 / 160
+    PANEL_H_RATIO = 110 / 160
+    MARGIN = 16
+    GAP = 8
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(self.PREVIEW_SIZE + 16, self.PREVIEW_SIZE + 16)
-        self.auto_mode = True
         self.manual_palette = {}
+        self._clock_size = self.CLOCK_SIZE
+        self._font_size = self.DEFAULT_FONT_SIZE
+        self._apply_size()
 
-    def set_state(self, auto_mode, manual_palette):
-        self.auto_mode = bool(auto_mode)
+    def set_state(self, manual_palette, clock_size=None, font_size=None):
         self.manual_palette = dict(manual_palette)
+        if clock_size is not None:
+            self._clock_size = max(
+                self.CLOCK_SIZE, min(self.MAX_PREVIEW_CLOCK_SIZE, int(clock_size))
+            )
+        if font_size is not None:
+            self._font_size = int(font_size)
+        self._apply_size()
         self.update()
+
+    def _apply_size(self):
+        """Recompute panel dims and the fixed preview size from the clock size."""
+        self._panel_width = max(1, round(self._clock_size * self.PANEL_W_RATIO))
+        self._panel_height = max(1, round(self._clock_size * self.PANEL_H_RATIO))
+        width = self.MARGIN + self._clock_size + self.GAP + self._panel_width + self.MARGIN
+        height = self.MARGIN + self._clock_size + self.MARGIN
+        self.setFixedSize(width, height)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.Antialiasing)
-            if self.auto_mode:
-                # Neutral light backdrop -> automatic contrast resolves to
-                # black hands with white halo, like a bright wallpaper.
-                painter.fillRect(self.rect(), QColor(238, 238, 238))
-                display = QColor(0, 0, 0)
-                border = QColor(255, 255, 255)
-                face = QColor(255, 255, 255)
-                face.setAlpha(42)
-                colors = {
-                    "hand_color": display,
-                    "tick_color": QColor(display),
-                    "face_color": face,
-                    "border_color": border,
-                }
-            else:
-                colors = {
-                    role: QColor(self.manual_palette.get(role))
-                    for role in COLOR_ROLES
-                }
-            size = float(self.PREVIEW_SIZE)
-            x = (self.width() - size) / 2
-            y = (self.height() - size) / 2
-            draw_clock(painter, x, y, datetime.now(), size, colors)
+            colors = {
+                role: QColor(self.manual_palette.get(role))
+                for role in COLOR_ROLES
+            }
+            draw_clock(
+                painter,
+                float(self.MARGIN),
+                float(self.MARGIN),
+                datetime.now(),
+                float(self._clock_size),
+                colors,
+            )
+            draw_hardware_specs(
+                painter,
+                self.MARGIN + self._clock_size + self.GAP,
+                self.MARGIN,
+                self._panel_width,
+                self._panel_height,
+                _STUB_STATS,
+                colors,
+                font_size=self._font_size,
+            )
         finally:
             painter.end()
 
@@ -84,6 +123,8 @@ class SettingsDialog(QDialog):
         "hand_color": "Hands",
         "tick_color": "Ticks",
         "border_color": "Border",
+        "text_color": "Text",
+        "sheet_color": "Sheet",
     }
 
     def __init__(self, clock, parent=None):
@@ -91,14 +132,15 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Analog Clock settings")
         self._clock = clock
         self._chosen_colors = dict(clock.colors.manual_colors)
+        # Display-size choices, applied live to the preview and (on accept)
+        # written to the clock instance and persisted with the rest of the
+        # appearance settings.
+        self._chosen_clock_size = int(clock.CLOCK_SIZE)
+        self._chosen_font_size = int(clock.font_size)
 
         layout = QVBoxLayout(self)
 
-        self.auto_check = QCheckBox("Use automatic contrast colors", self)
-        self.auto_check.setChecked(clock.colors.use_auto_contrast)
-        layout.addWidget(self.auto_check)
-
-        color_group = QGroupBox("Fixed colors (used when auto contrast is off)", self)
+        color_group = QGroupBox("Clock colors", self)
         color_grid = QGridLayout(color_group)
         self._swatches = {}
         self._color_buttons = {}
@@ -124,9 +166,25 @@ class SettingsDialog(QDialog):
             self._color_buttons[role] = button
         layout.addWidget(color_group)
 
+        size_group = QGroupBox("Display size", self)
+        size_layout = QFormLayout(size_group)
+        self.clock_size_spin = QSpinBox(size_group)
+        self.clock_size_spin.setRange(clock.MIN_CLOCK_SIZE, clock.MAX_CLOCK_SIZE)
+        self.clock_size_spin.setSuffix(" px")
+        self.clock_size_spin.setValue(self._chosen_clock_size)
+        self.font_size_spin = QSpinBox(size_group)
+        self.font_size_spin.setRange(clock.MIN_FONT_SIZE, clock.MAX_FONT_SIZE)
+        self.font_size_spin.setSuffix(" pt")
+        self.font_size_spin.setValue(self._chosen_font_size)
+        size_layout.addRow("Clock size:", self.clock_size_spin)
+        size_layout.addRow("Font size:", self.font_size_spin)
+        self.clock_size_spin.valueChanged.connect(self._on_size_changed)
+        self.font_size_spin.valueChanged.connect(self._on_size_changed)
+        layout.addWidget(size_group)
+
         preview_group = QGroupBox("Live preview", self)
         preview_layout = QVBoxLayout(preview_group)
-        self.preview = _ClockPreview(preview_group)
+        self.preview = _AppearancePreview(preview_group)
         preview_layout.addWidget(self.preview, 0, Qt.AlignHCenter)
         layout.addWidget(preview_group)
 
@@ -147,15 +205,13 @@ class SettingsDialog(QDialog):
         dialog_buttons.rejected.connect(self.reject)
         layout.addWidget(dialog_buttons)
 
-        # Color pickers only make sense in manual mode; keep the live preview
-        # in sync with either mode and animate its second hand once a second.
-        self.auto_check.toggled.connect(self._sync_enabled)
-        self.auto_check.toggled.connect(lambda checked: self.refresh_preview())
+        # Keep the live preview in sync with the chosen colors and animate
+        # its second hand once a second.
         self._preview_timer = QTimer(self)
         self._preview_timer.setInterval(1000)
         self._preview_timer.timeout.connect(self.preview.update)
         self._preview_timer.start()
-        self._sync_enabled()
+        self.refresh_preview()
 
     # -- helpers -----------------------------------------------------------
 
@@ -184,23 +240,27 @@ class SettingsDialog(QDialog):
             self.refresh_preview()
 
     def refresh_preview(self):
-        self.preview.set_state(self.auto_check.isChecked(), self._chosen_colors)
+        self.preview.set_state(
+            self._chosen_colors,
+            clock_size=self._chosen_clock_size,
+            font_size=self._chosen_font_size,
+        )
 
-    def _sync_enabled(self):
-        manual_mode = not self.auto_check.isChecked()
-        for button in self._color_buttons.values():
-            button.setEnabled(manual_mode)
-        for swatch in self._swatches.values():
-            swatch.setEnabled(manual_mode)
+    def _on_size_changed(self):
+        self._chosen_clock_size = self.clock_size_spin.value()
+        self._chosen_font_size = self.font_size_spin.value()
         self.refresh_preview()
 
     # -- values read back by AnalogClock.open_settings_dialog --------------
 
-    def use_auto_contrast_checked(self):
-        return self.auto_check.isChecked()
-
     def chosen_colors(self):
         return dict(self._chosen_colors)
+
+    def chosen_clock_size(self):
+        return self.clock_size_spin.value()
+
+    def chosen_font_size(self):
+        return self.font_size_spin.value()
 
     def top_timezone_text(self):
         return self.top_tz_combo.currentText().strip()

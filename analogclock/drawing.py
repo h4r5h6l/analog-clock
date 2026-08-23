@@ -144,21 +144,17 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
     painter.setBrush(Qt.NoBrush)
 
 
-def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors):
+def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10):
     """Draw the rounded specs sheet plus CPU/RAM/GPU/VRAM/battery text.
 
     ``stats`` comes from hardware.HardwareMonitor.stats_snapshot();
     ``panel_x/y/width/height`` describe the panel rect computed by the
-    caller from the widget's layout constants.
+    caller from the widget's layout constants; ``font_size`` is the specs
+    text point size (the caller controls it from the appearance settings).
     """
-    hand_color = QColor(colors["hand_color"])
+    text_color = QColor(colors["text_color"])
     border_color = QColor(colors["border_color"])
-
-    # Determine adaptive sheet color based on the hand/display color.
-    # Black text means a light background, so the sheet goes light to match;
-    # otherwise dark.
-    is_light_desktop = hand_color == QColor(Qt.black)
-    sheet_color = QColor(Qt.white) if is_light_desktop else QColor(Qt.black)
+    sheet_color = QColor(colors["sheet_color"])
 
     # Background sheet as an independent rounded rectangle so the panel and
     # clocks appear visually distinct.
@@ -170,12 +166,14 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
 
     # Set up font for specs text
     specs_font = painter.font()
-    specs_font.setPointSize(10)
+    specs_font.setPointSize(font_size)
     specs_font.setBold(True)
     painter.setFont(specs_font)
 
     padding = TEXT_PADDING
-    line_height = LINE_HEIGHT
+    # Line height tracks the font so the five stat lines keep their spacing
+    # as the user enlarges the specs text.
+    line_height = round(font_size * 1.9)
 
     # Prepare specs text
     cpu_text = f"CPU: {stats['cpu_percent']:.0f}%"
@@ -193,7 +191,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         QRectF(text_x, text_y, panel_width - (padding * 2), line_height),
         Qt.AlignLeft,
         cpu_text,
-        hand_color,
+        text_color,
         border_color,
     )
 
@@ -202,7 +200,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         QRectF(text_x, text_y + line_height, panel_width - (padding * 2), line_height),
         Qt.AlignLeft,
         ram_text,
-        hand_color,
+        text_color,
         border_color,
     )
 
@@ -211,7 +209,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         QRectF(text_x, text_y + (line_height * 2), panel_width - (padding * 2), line_height),
         Qt.AlignLeft,
         gpu_text,
-        hand_color,
+        text_color,
         border_color,
     )
 
@@ -220,7 +218,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         QRectF(text_x, text_y + (line_height * 3), panel_width - (padding * 2), line_height),
         Qt.AlignLeft,
         vram_text,
-        hand_color,
+        text_color,
         border_color,
     )
 
@@ -229,7 +227,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         QRectF(text_x, text_y + (line_height * 4), panel_width - (padding * 2), line_height),
         Qt.AlignLeft,
         f" {battery_text}",
-        hand_color,
+        text_color,
         border_color,
     )
 
