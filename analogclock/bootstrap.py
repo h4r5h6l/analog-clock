@@ -1,10 +1,10 @@
 """Platform workarounds applied before QApplication is constructed.
 
-This clock positions itself (restored saved position, free dragging) and
-samples the pixels behind it for contrast. Both need client-side window
-positioning, which the native Wayland platform plugin cannot do -- every
-self.move() would be silently ignored by the compositor. Route through
-XWayland (xcb) on Linux unless the user chose a platform explicitly.
+This clock positions itself (restores saved position, free dragging),
+which needs client-side window positioning. The native Wayland platform
+plugin cannot do that -- every self.move() would be silently ignored by
+the compositor. Route through XWayland (xcb) on Linux unless the user
+chose a platform explicitly.
 Guarded so headless/offscreen setups without an X display are unaffected.
 """
 

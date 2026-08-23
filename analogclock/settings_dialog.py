@@ -1,9 +1,9 @@
-"""Modal settings panel: contrast mode, fixed colors, clock timezones.
+"""Modal settings panel: fixed clock colors and clock timezones.
 
 Includes a live single-clock preview rendered via drawing.draw_clock that
-reflects either the automatic-contrast palette or the currently chosen
-fixed colors. Color swatches are plain QFrames instead of recolored
-buttons so they read as swatches rather than clickable controls.
+reflects the currently chosen fixed colors. Color swatches are plain
+QFrames instead of recolored buttons so they read as swatches rather than
+clickable controls.
 """
 
 from datetime import datetime
@@ -12,7 +12,6 @@ from zoneinfo import available_timezones
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
-    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -39,11 +38,9 @@ class _ClockPreview(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(self.PREVIEW_SIZE + 16, self.PREVIEW_SIZE + 16)
-        self.auto_mode = True
         self.manual_palette = {}
 
-    def set_state(self, auto_mode, manual_palette):
-        self.auto_mode = bool(auto_mode)
+    def set_state(self, manual_palette):
         self.manual_palette = dict(manual_palette)
         self.update()
 
@@ -51,25 +48,10 @@ class _ClockPreview(QWidget):
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.Antialiasing)
-            if self.auto_mode:
-                # Neutral light backdrop -> automatic contrast resolves to
-                # black hands with white halo, like a bright wallpaper.
-                painter.fillRect(self.rect(), QColor(238, 238, 238))
-                display = QColor(0, 0, 0)
-                border = QColor(255, 255, 255)
-                face = QColor(255, 255, 255)
-                face.setAlpha(42)
-                colors = {
-                    "hand_color": display,
-                    "tick_color": QColor(display),
-                    "face_color": face,
-                    "border_color": border,
-                }
-            else:
-                colors = {
-                    role: QColor(self.manual_palette.get(role))
-                    for role in COLOR_ROLES
-                }
+            colors = {
+                role: QColor(self.manual_palette.get(role))
+                for role in COLOR_ROLES
+            }
             size = float(self.PREVIEW_SIZE)
             x = (self.width() - size) / 2
             y = (self.height() - size) / 2
@@ -94,11 +76,7 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        self.auto_check = QCheckBox("Use automatic contrast colors", self)
-        self.auto_check.setChecked(clock.colors.use_auto_contrast)
-        layout.addWidget(self.auto_check)
-
-        color_group = QGroupBox("Fixed colors (used when auto contrast is off)", self)
+        color_group = QGroupBox("Clock colors", self)
         color_grid = QGridLayout(color_group)
         self._swatches = {}
         self._color_buttons = {}
@@ -147,15 +125,13 @@ class SettingsDialog(QDialog):
         dialog_buttons.rejected.connect(self.reject)
         layout.addWidget(dialog_buttons)
 
-        # Color pickers only make sense in manual mode; keep the live preview
-        # in sync with either mode and animate its second hand once a second.
-        self.auto_check.toggled.connect(self._sync_enabled)
-        self.auto_check.toggled.connect(lambda checked: self.refresh_preview())
+        # Keep the live preview in sync with the chosen colors and animate
+        # its second hand once a second.
         self._preview_timer = QTimer(self)
         self._preview_timer.setInterval(1000)
         self._preview_timer.timeout.connect(self.preview.update)
         self._preview_timer.start()
-        self._sync_enabled()
+        self.refresh_preview()
 
     # -- helpers -----------------------------------------------------------
 
@@ -184,20 +160,9 @@ class SettingsDialog(QDialog):
             self.refresh_preview()
 
     def refresh_preview(self):
-        self.preview.set_state(self.auto_check.isChecked(), self._chosen_colors)
-
-    def _sync_enabled(self):
-        manual_mode = not self.auto_check.isChecked()
-        for button in self._color_buttons.values():
-            button.setEnabled(manual_mode)
-        for swatch in self._swatches.values():
-            swatch.setEnabled(manual_mode)
-        self.refresh_preview()
+        self.preview.set_state(self._chosen_colors)
 
     # -- values read back by AnalogClock.open_settings_dialog --------------
-
-    def use_auto_contrast_checked(self):
-        return self.auto_check.isChecked()
 
     def chosen_colors(self):
         return dict(self._chosen_colors)

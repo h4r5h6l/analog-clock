@@ -1,7 +1,7 @@
 """AnalogClock(QWidget): window behavior, timers, drag/move, paint glue.
 
 This module owns everything window-shaped -- frameless/always-on-top
-flags, the five QTimer responsibilities, Wayland-safe dragging with
+flags, the four QTimer responsibilities, Wayland-safe dragging with
 debounced position persistence, and the paintEvent that delegates all
 drawing to analogclock.drawing using state from the colors, timezones,
 and hardware controllers.
@@ -56,7 +56,7 @@ class AnalogClock(QWidget):
 
         # ---- Extracted controllers --------------------------------------
         self.hardware = HardwareMonitor()
-        self.colors = ColorController(self)
+        self.colors = ColorController()
         self.timezones = TimezonePair(DEFAULT_TOP_TZ, DEFAULT_BOTTOM_TZ)
 
         self.clock_timer = QTimer(self)
@@ -67,11 +67,6 @@ class AnalogClock(QWidget):
         self.hardware_timer = QTimer(self)
         self.hardware_timer.timeout.connect(self._on_hardware_poll)
         self.hardware_timer.start(2000)
-        # Smooth contrast/color transition loop (~60 Hz tick, repaints only
-        # while the interpolated color actually changes).
-        self.animation_timer = QTimer(self)
-        self.animation_timer.timeout.connect(self.colors.update_contrast_transition)
-        self.animation_timer.start(16)
         self.visibility_timer = QTimer(self)
         self.visibility_timer.timeout.connect(self.ensure_on_top)
         self.visibility_timer.start(round(self.KEEP_ON_TOP_SECONDS * 1000))
@@ -158,7 +153,6 @@ class AnalogClock(QWidget):
         payload = {
             "x": int(self.x()),
             "y": int(self.y()),
-            "use_auto_contrast": bool(self.colors.use_auto_contrast),
             "manual_colors": {
                 role: self.colors.manual_colors[role].name()
                 for role in COLOR_ROLES
@@ -187,8 +181,6 @@ class AnalogClock(QWidget):
             return False
 
         # Optional appearance settings -- tolerated missing on older files.
-        if isinstance(data.get("use_auto_contrast"), bool):
-            self.colors.use_auto_contrast = data["use_auto_contrast"]
         saved_colors = data.get("manual_colors")
         if isinstance(saved_colors, dict):
             for role in COLOR_ROLES:
@@ -409,9 +401,7 @@ class AnalogClock(QWidget):
         dialog.raise_()
         dialog.activateWindow()
         if dialog.exec_() == QDialog.Accepted:
-            self.colors.apply_appearance_settings(
-                dialog.use_auto_contrast_checked(), dialog.chosen_colors()
-            )
+            self.colors.apply_appearance_settings(dialog.chosen_colors())
             self.timezones.set(
                 dialog.top_timezone_text(), dialog.bottom_timezone_text()
             )
