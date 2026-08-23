@@ -1,4 +1,4 @@
-"""Modal settings panel: fixed clock colors and clock timezones.
+"""Modal settings panel: fixed clock colors, timezones, and display sizes.
 
 Includes a live preview rendered via drawing.draw_clock and draw_hardware_specs
 that reflects the currently chosen fixed colors for the clock face and the
@@ -18,11 +18,13 @@ from PyQt5.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFrame,
+    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -43,24 +45,47 @@ _STUB_STATS = {
 
 
 class _AppearancePreview(QWidget):
-    """Live preview of the clock and a hardware panel in the current colors."""
+    """Live preview of the clock and a hardware panel in the current colors.
+
+    The preview scales its clock face and hardware panel with the chosen clock
+    size (so the background sheet grows with it), and the specs font tracks the
+    chosen font size. The preview clock is capped so the dialog stays compact
+    while still reflecting the scaling direction.
+    """
 
     CLOCK_SIZE = 130
-    PANEL_WIDTH = 90
-    PANEL_HEIGHT = 110
+    MAX_PREVIEW_CLOCK_SIZE = 170
+    DEFAULT_FONT_SIZE = 10
+    PANEL_W_RATIO = 90 / 160
+    PANEL_H_RATIO = 110 / 160
     MARGIN = 16
     GAP = 8
-    PREVIEW_WIDTH = MARGIN + CLOCK_SIZE + GAP + PANEL_WIDTH + MARGIN
-    PREVIEW_HEIGHT = MARGIN + CLOCK_SIZE + MARGIN
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(self.PREVIEW_WIDTH, self.PREVIEW_HEIGHT)
         self.manual_palette = {}
+        self._clock_size = self.CLOCK_SIZE
+        self._font_size = self.DEFAULT_FONT_SIZE
+        self._apply_size()
 
-    def set_state(self, manual_palette):
+    def set_state(self, manual_palette, clock_size=None, font_size=None):
         self.manual_palette = dict(manual_palette)
+        if clock_size is not None:
+            self._clock_size = max(
+                self.CLOCK_SIZE, min(self.MAX_PREVIEW_CLOCK_SIZE, int(clock_size))
+            )
+        if font_size is not None:
+            self._font_size = int(font_size)
+        self._apply_size()
         self.update()
+
+    def _apply_size(self):
+        """Recompute panel dims and the fixed preview size from the clock size."""
+        self._panel_width = max(1, round(self._clock_size * self.PANEL_W_RATIO))
+        self._panel_height = max(1, round(self._clock_size * self.PANEL_H_RATIO))
+        width = self.MARGIN + self._clock_size + self.GAP + self._panel_width + self.MARGIN
+        height = self.MARGIN + self._clock_size + self.MARGIN
+        self.setFixedSize(width, height)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -70,23 +95,23 @@ class _AppearancePreview(QWidget):
                 role: QColor(self.manual_palette.get(role))
                 for role in COLOR_ROLES
             }
-            clock_size = float(self.CLOCK_SIZE)
             draw_clock(
                 painter,
                 float(self.MARGIN),
                 float(self.MARGIN),
                 datetime.now(),
-                clock_size,
+                float(self._clock_size),
                 colors,
             )
             draw_hardware_specs(
                 painter,
-                self.MARGIN + self.CLOCK_SIZE + self.GAP,
+                self.MARGIN + self._clock_size + self.GAP,
                 self.MARGIN,
-                self.PANEL_WIDTH,
-                self.PANEL_HEIGHT,
+                self._panel_width,
+                self._panel_height,
                 _STUB_STATS,
                 colors,
+                font_size=self._font_size,
             )
         finally:
             painter.end()
@@ -107,6 +132,11 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Analog Clock settings")
         self._clock = clock
         self._chosen_colors = dict(clock.colors.manual_colors)
+        # Display-size choices, applied live to the preview and (on accept)
+        # written to the clock instance and persisted with the rest of the
+        # appearance settings.
+        self._chosen_clock_size = int(clock.CLOCK_SIZE)
+        self._chosen_font_size = int(clock.font_size)
 
         layout = QVBoxLayout(self)
 
@@ -135,6 +165,22 @@ class SettingsDialog(QDialog):
             self._swatches[role] = swatch
             self._color_buttons[role] = button
         layout.addWidget(color_group)
+
+        size_group = QGroupBox("Display size", self)
+        size_layout = QFormLayout(size_group)
+        self.clock_size_spin = QSpinBox(size_group)
+        self.clock_size_spin.setRange(clock.MIN_CLOCK_SIZE, clock.MAX_CLOCK_SIZE)
+        self.clock_size_spin.setSuffix(" px")
+        self.clock_size_spin.setValue(self._chosen_clock_size)
+        self.font_size_spin = QSpinBox(size_group)
+        self.font_size_spin.setRange(clock.MIN_FONT_SIZE, clock.MAX_FONT_SIZE)
+        self.font_size_spin.setSuffix(" pt")
+        self.font_size_spin.setValue(self._chosen_font_size)
+        size_layout.addRow("Clock size:", self.clock_size_spin)
+        size_layout.addRow("Font size:", self.font_size_spin)
+        self.clock_size_spin.valueChanged.connect(self._on_size_changed)
+        self.font_size_spin.valueChanged.connect(self._on_size_changed)
+        layout.addWidget(size_group)
 
         preview_group = QGroupBox("Live preview", self)
         preview_layout = QVBoxLayout(preview_group)
@@ -194,12 +240,27 @@ class SettingsDialog(QDialog):
             self.refresh_preview()
 
     def refresh_preview(self):
-        self.preview.set_state(self._chosen_colors)
+        self.preview.set_state(
+            self._chosen_colors,
+            clock_size=self._chosen_clock_size,
+            font_size=self._chosen_font_size,
+        )
+
+    def _on_size_changed(self):
+        self._chosen_clock_size = self.clock_size_spin.value()
+        self._chosen_font_size = self.font_size_spin.value()
+        self.refresh_preview()
 
     # -- values read back by AnalogClock.open_settings_dialog --------------
 
     def chosen_colors(self):
         return dict(self._chosen_colors)
+
+    def chosen_clock_size(self):
+        return self.clock_size_spin.value()
+
+    def chosen_font_size(self):
+        return self.font_size_spin.value()
 
     def top_timezone_text(self):
         return self.top_tz_combo.currentText().strip()

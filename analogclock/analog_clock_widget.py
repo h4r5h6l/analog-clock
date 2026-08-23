@@ -22,6 +22,16 @@ from analogclock.timezones import DEFAULT_BOTTOM_TZ, DEFAULT_TOP_TZ, TimezonePai
 
 
 class AnalogClock(QWidget):
+    # Default and bounds for the new clock-size appearance control. A clock
+    # face of DEFAULT_CLOCK_SIZE is drawn on a 200-px logical canvas (see
+    # draw_clock's `size / 200`); CLOCK_SIZE scales that whole canvas.
+    DEFAULT_CLOCK_SIZE = 160
+    MIN_CLOCK_SIZE = 80
+    MAX_CLOCK_SIZE = 360
+    # Default and bounds for the new font-size appearance control (specs text).
+    DEFAULT_FONT_SIZE = 10
+    MIN_FONT_SIZE = 6
+    MAX_FONT_SIZE = 32
     CLOCK_SIZE = 160
     # smaller gap between stacked clocks to bring faces closer together
     CLOCK_SPACING = 6
@@ -33,12 +43,14 @@ class AnalogClock(QWidget):
     BUTTON_TOP_GAP = 44
     # (top control area reserved for controls)
     CLOCKS_HEIGHT = CLOCK_SIZE * 2 + CLOCK_SPACING
-    # Hardware specs panel (positioned to the right of clocks)
-    HARDWARE_PANEL_HEIGHT = 110
-    HARDWARE_PANEL_WIDTH = 90
+    # Hardware specs panel (positioned to the right of clocks). The *_BASE
+    # values are the panel size at DEFAULT_CLOCK_SIZE; _apply_geometry scales
+    # them with the clock so the background sheet grows with it.
+    HARDWARE_PANEL_HEIGHT_BASE = 110
+    HARDWARE_PANEL_WIDTH_BASE = 90
     SPECS_PANEL_SPACING = 24
     WINDOW_HEIGHT = CLOCKS_HEIGHT + CONTROLS_SPACE
-    WINDOW_WIDTH = CLOCK_SIZE + (HORIZONTAL_PADDING * 2) + SIDE_SLIDER_SPACE + HARDWARE_PANEL_WIDTH + SPECS_PANEL_SPACING
+    WINDOW_WIDTH = CLOCK_SIZE + (HORIZONTAL_PADDING * 2) + SIDE_SLIDER_SPACE + HARDWARE_PANEL_WIDTH_BASE + SPECS_PANEL_SPACING
     KEEP_ON_TOP_SECONDS = 1.5
     # Free dragging vs edge snapping: when False (default) the clock can be
     # dragged freely to any position and remembers it across restarts; when
@@ -83,8 +95,14 @@ class AnalogClock(QWidget):
 
         # reserve a smaller top control area so the clock is closer to the cursor
         self.top_control_offset = 12
-        # enlarge window height to include the top control area
-        self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT + self.top_control_offset)
+        # Mutable appearance state (defaults; overridden on restore or via the
+        # settings dialog). Instance attrs so each clock can deviate from the
+        # class defaults independently.
+        self.CLOCK_SIZE = self.DEFAULT_CLOCK_SIZE
+        self.font_size = self.DEFAULT_FONT_SIZE
+        # Recompute clock/panel/window geometry from the current size and fix
+        # the window to the new size (includes the reserved top control area).
+        self._apply_geometry()
         # Update hardware stats immediately
         self.hardware.poll()
         # Free-drag mode: restore the last saved position; only fall back to
@@ -92,6 +110,45 @@ class AnalogClock(QWidget):
         # when edge snapping is explicitly enabled).
         if self.SNAP_TO_EDGE_ENABLED or not self.restore_from_config():
             self.move_to_bottom_left()
+
+    # ---- Geometry / sizing ---------------------------------------------------
+
+    def _apply_geometry(self):
+        """Recompute clock panel and window geometry from the current clock size.
+
+        ``CLOCK_SIZE`` scales the stacked faces (draw_clock normalizes via
+        ``size / 200``); the hardware panel and its background sheet scale with
+        it through the ``*_BASE`` ratios, so a larger clock grows both faces
+        **and** the background sheet.
+        """
+        panel_w_ratio = self.HARDWARE_PANEL_WIDTH_BASE / self.DEFAULT_CLOCK_SIZE
+        panel_h_ratio = self.HARDWARE_PANEL_HEIGHT_BASE / self.DEFAULT_CLOCK_SIZE
+        self.HARDWARE_PANEL_WIDTH = max(1, round(self.CLOCK_SIZE * panel_w_ratio))
+        self.HARDWARE_PANEL_HEIGHT = max(1, round(self.CLOCK_SIZE * panel_h_ratio))
+        self.CLOCKS_HEIGHT = self.CLOCK_SIZE * 2 + self.CLOCK_SPACING
+        self.WINDOW_WIDTH = (
+            self.CLOCK_SIZE
+            + (self.HORIZONTAL_PADDING * 2)
+            + self.SIDE_SLIDER_SPACE
+            + self.HARDWARE_PANEL_WIDTH
+            + self.SPECS_PANEL_SPACING
+        )
+        self.WINDOW_HEIGHT = self.CLOCKS_HEIGHT + self.CONTROLS_SPACE
+        self.setFixedSize(
+            self.WINDOW_WIDTH,
+            self.WINDOW_HEIGHT + getattr(self, "top_control_offset", 0),
+        )
+
+    def apply_display_size(self, clock_size, font_size):
+        """Apply user-chosen clock and font sizes, then re-layout and repaint."""
+        self.CLOCK_SIZE = max(
+            self.MIN_CLOCK_SIZE, min(self.MAX_CLOCK_SIZE, int(clock_size))
+        )
+        self.font_size = max(
+            self.MIN_FONT_SIZE, min(self.MAX_FONT_SIZE, int(font_size))
+        )
+        self._apply_geometry()
+        self.update()
 
     # ---- Window flags / visibility -----------------------------------------
 
@@ -160,6 +217,8 @@ class AnalogClock(QWidget):
             },
             "top_timezone": self.timezones.top_name,
             "bottom_timezone": self.timezones.bottom_name,
+            "clock_size": int(self.CLOCK_SIZE),
+            "font_size": int(self.font_size),
         }
         config.save_window_position(payload)
 
@@ -204,6 +263,21 @@ class AnalogClock(QWidget):
             else self.timezones.bottom_name
         )
         self.timezones.set(new_top, new_bottom)
+
+        # Optional display-size settings -- tolerated missing on older files.
+        # Applied (and geometry recomputed) before the screen-position check
+        # below, since the window size depends on the chosen clock size.
+        saved_clock_size = data.get("clock_size")
+        if isinstance(saved_clock_size, int):
+            self.CLOCK_SIZE = max(
+                self.MIN_CLOCK_SIZE, min(self.MAX_CLOCK_SIZE, saved_clock_size)
+            )
+        saved_font_size = data.get("font_size")
+        if isinstance(saved_font_size, int):
+            self.font_size = max(
+                self.MIN_FONT_SIZE, min(self.MAX_FONT_SIZE, saved_font_size)
+            )
+        self._apply_geometry()
 
         # Reject positions whose center no longer sits on any connected
         # screen (e.g. saved on an external monitor that is now detached).
@@ -335,6 +409,7 @@ class AnalogClock(QWidget):
             self.HARDWARE_PANEL_HEIGHT,
             self.hardware.stats_snapshot(),
             palette,
+            font_size=self.font_size,
         )
 
     # ---- Settings dialog ------------------------------------------------------
@@ -404,6 +479,9 @@ class AnalogClock(QWidget):
             self.colors.apply_appearance_settings(dialog.chosen_colors())
             self.timezones.set(
                 dialog.top_timezone_text(), dialog.bottom_timezone_text()
+            )
+            self.apply_display_size(
+                dialog.chosen_clock_size(), dialog.chosen_font_size()
             )
             self.update()
             # Single config write for the whole applied change set.

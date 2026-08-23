@@ -144,12 +144,13 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors):
     painter.setBrush(Qt.NoBrush)
 
 
-def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors):
+def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10):
     """Draw the rounded specs sheet plus CPU/RAM/GPU/VRAM/battery text.
 
     ``stats`` comes from hardware.HardwareMonitor.stats_snapshot();
     ``panel_x/y/width/height`` describe the panel rect computed by the
-    caller from the widget's layout constants.
+    caller from the widget's layout constants; ``font_size`` is the specs
+    text point size (the caller controls it from the appearance settings).
     """
     text_color = QColor(colors["text_color"])
     border_color = QColor(colors["border_color"])
@@ -165,12 +166,14 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
 
     # Set up font for specs text
     specs_font = painter.font()
-    specs_font.setPointSize(10)
+    specs_font.setPointSize(font_size)
     specs_font.setBold(True)
     painter.setFont(specs_font)
 
     padding = TEXT_PADDING
-    line_height = LINE_HEIGHT
+    # Line height tracks the font so the five stat lines keep their spacing
+    # as the user enlarges the specs text.
+    line_height = round(font_size * 1.9)
 
     # Prepare specs text
     cpu_text = f"CPU: {stats['cpu_percent']:.0f}%"

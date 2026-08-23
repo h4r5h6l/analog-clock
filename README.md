@@ -7,6 +7,7 @@ A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog cl
 - **Dual Timezone Display**: Two stacked analog clocks, each with a configurable IANA timezone (defaults: Berlin and Mumbai)
 - **Custom Color Palette**: Pick fixed colors for the clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet
 - **Settings Dialog**: Right-click the clock to change timezones and colors
+- **Resizable Clock & Text**: Change the clock face size and the specs font size in the settings dialog; both stacked clocks and the hardware-panel background sheet resize together, and the sizes are saved between restarts
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
 - **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
@@ -129,7 +130,7 @@ nohup venv/bin/python main.py > clock.log 2>&1 &
 
 ### Window Navigation
 - **Drag**: Left-click and drag to move the window anywhere on screen; the position is saved automatically (debounced) and restored on the next launch
-- **Right-Click**: Open the settings dialog (fixed colors, both timezones) — it opens beside the clock (right side, or left if there is no room) and stays above it
+- **Right-Click**: Open the settings dialog (colors, timezones, and display sizes) — it opens beside the clock (right side, or left if there is no room) and stays above it
 - The window is always-on-top and re-shows itself if minimized; it has no title bar or close button
 
 ### Display Information
@@ -143,6 +144,9 @@ nohup venv/bin/python main.py > clock.log 2>&1 &
 
 ### Custom Colors
 The clock always uses your fixed colors, chosen in the settings dialog (a live preview shows the result): clock face, hands, ticks, and border, plus the hardware-panel text and its background sheet. Defaults: white face, border, and sheet with black hands, ticks, and text.
+
+### Display Size
+Use the **Display size** controls in the settings dialog to set the clock face size and the specs (hardware-panel) font size. Increasing the clock size grows **both** stacked clocks and the hardware-panel background sheet together; the chosen sizes are saved to `window_position.json` alongside your colors and timezones and restored on the next launch.
 
 ## Troubleshooting
 
