@@ -10,7 +10,7 @@ and hardware controllers.
 import sys
 
 from PyQt5.QtCore import QPoint, Qt, QTimer
-from PyQt5.QtGui import QColor, QPainter
+from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 
 from analogclock import config
@@ -19,6 +19,66 @@ from analogclock.drawing import draw_clock, draw_hardware_specs
 from analogclock.hardware import HardwareMonitor
 from analogclock.settings_dialog import SettingsDialog
 from analogclock.timezones import DEFAULT_BOTTOM_TZ, DEFAULT_TOP_TZ, TimezonePair, _safe_zoneinfo
+
+
+class GridOverlay(QWidget):
+    """Full-screen translucent overlay that draws the snap grid while dragging.
+
+    The lines are drawn at global coordinates that are multiples of the grid
+    spacing, so they line up exactly with the positions the window can snap
+    to. The overlay passes mouse events through and never takes focus.
+    """
+
+    LINE_ALPHA = 90
+
+    def __init__(self):
+        super().__init__()
+        self.grid_spacing = 10
+        self.setWindowFlags(
+            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+    def show_grid(self, grid_spacing):
+        """Cover the whole virtual desktop and paint the grid."""
+        self.grid_spacing = max(5, int(grid_spacing))
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            self.setGeometry(screen.virtualGeometry())
+        self.show()
+        self.update()
+
+    def hide_grid(self):
+        self.hide()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        try:
+            spacing = max(5, self.grid_spacing)
+            pen = QPen(QColor(255, 255, 255, self.LINE_ALPHA), 1)
+            pen.setStyle(Qt.DotLine)
+            painter.setPen(pen)
+
+            geo = self.geometry()
+            width, height = geo.width(), geo.height()
+
+            # Vertical lines at global multiples of the spacing.
+            gx = ((geo.x() + spacing - 1) // spacing) * spacing
+            while gx <= geo.x() + width:
+                lx = gx - geo.x()
+                painter.drawLine(lx, 0, lx, height)
+                gx += spacing
+
+            # Horizontal lines at global multiples of the spacing.
+            gy = ((geo.y() + spacing - 1) // spacing) * spacing
+            while gy <= geo.y() + height:
+                ly = gy - geo.y()
+                painter.drawLine(0, ly, width, ly)
+                gy += spacing
+        finally:
+            painter.end()
 
 
 class AnalogClock(QWidget):
@@ -52,6 +112,11 @@ class AnalogClock(QWidget):
     WINDOW_HEIGHT = CLOCKS_HEIGHT + CONTROLS_SPACE
     WINDOW_WIDTH = CLOCK_SIZE + (HORIZONTAL_PADDING * 2) + SIDE_SLIDER_SPACE + HARDWARE_PANEL_WIDTH_BASE + SPECS_PANEL_SPACING
     KEEP_ON_TOP_SECONDS = 1.5
+    # Grid snapping configuration (controlled via the settings dialog).
+    DEFAULT_GRID_SPACING = 10  # pixels
+    MIN_GRID_SPACING = 5
+    MAX_GRID_SPACING = 150
+
     # Free dragging vs edge snapping: when False (default) the clock can be
     # dragged freely to any position and remembers it across restarts; when
     # True the legacy bottom-left placement and enterEvent edge snap apply.
@@ -65,6 +130,13 @@ class AnalogClock(QWidget):
         # keep the clock window at 60% opacity for consistent transparency
         self.setWindowOpacity(0.60)
         self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
+
+        # Grid snapping: disabled by default so existing saved positions are
+        # not disturbed. Overridden on restore or via the settings dialog.
+        self.snap_to_grid = False
+        self.grid_spacing = self.DEFAULT_GRID_SPACING
+        # Full-screen overlay that paints the grid while a drag is active.
+        self._grid_overlay = GridOverlay()
 
         # ---- Extracted controllers --------------------------------------
         self.hardware = HardwareMonitor()
@@ -92,6 +164,9 @@ class AnalogClock(QWidget):
         self._position_save_timer.setInterval(500)
         self._position_save_timer.timeout.connect(self.save_window_position)
         self.old_pos = None
+        # Cursor-to-window-top-left offset captured on press, used to compute
+        # absolute drag positions so grid snapping never loses cursor travel.
+        self._drag_offset = None
 
         # reserve a smaller top control area so the clock is closer to the cursor
         self.top_control_offset = 12
@@ -219,6 +294,8 @@ class AnalogClock(QWidget):
             "bottom_timezone": self.timezones.bottom_name,
             "clock_size": int(self.CLOCK_SIZE),
             "font_size": int(self.font_size),
+            "snap_to_grid": bool(self.snap_to_grid),
+            "grid_spacing": int(self.grid_spacing),
         }
         config.save_window_position(payload)
 
@@ -277,6 +354,16 @@ class AnalogClock(QWidget):
             self.font_size = max(
                 self.MIN_FONT_SIZE, min(self.MAX_FONT_SIZE, saved_font_size)
             )
+        # Optional grid-snapping settings -- tolerated missing on older files.
+        saved_snap = data.get("snap_to_grid")
+        if isinstance(saved_snap, bool):
+            self.snap_to_grid = saved_snap
+        saved_grid = data.get("grid_spacing")
+        if isinstance(saved_grid, int):
+            self.grid_spacing = max(
+                self.MIN_GRID_SPACING,
+                min(self.MAX_GRID_SPACING, saved_grid),
+            )
         self._apply_geometry()
 
         # Reject positions whose center no longer sits on any connected
@@ -285,8 +372,38 @@ class AnalogClock(QWidget):
         if QApplication.screenAt(center) is None:
             return False
 
+        # When grid snapping is enabled, snap the restored position to the grid.
+        if self.snap_to_grid:
+            x, y = self._snap_position(x, y)
+
         self.move(x, y)
         return True
+
+    def _snap_value(self, value):
+        """Round ``value`` to the nearest multiple of the grid spacing."""
+        spacing = max(self.MIN_GRID_SPACING, int(self.grid_spacing))
+        return spacing * round(value / spacing)
+
+    def _snap_position(self, x, y):
+        """Return ``(x, y)`` snapped to the nearest grid intersection."""
+        return self._snap_value(x), self._snap_value(y)
+
+    def apply_grid_settings(self, snap_enabled, grid_spacing):
+        """Adopt new snap-to-grid settings from the settings dialog.
+
+        Enabling the setting also snaps the current position to the grid so
+        the change is immediately visible.
+        """
+        self.snap_to_grid = bool(snap_enabled)
+        self.grid_spacing = max(
+            self.MIN_GRID_SPACING,
+            min(self.MAX_GRID_SPACING, int(grid_spacing)),
+        )
+        if self.snap_to_grid:
+            x, y = self._snap_position(self.x(), self.y())
+            self.move(x, y)
+        self.save_window_position()
+        self.update()
 
     def set_timezones(self, top_name, bottom_name):
         """Adopt new timezone strings; invalid ones fall back to local time."""
@@ -304,6 +421,9 @@ class AnalogClock(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            # Show the visual snap grid while dragging when snapping is on.
+            if self.snap_to_grid:
+                self._grid_overlay.show_grid(self.grid_spacing)
             # Native Wayland clients cannot move themselves; hand the drag
             # to the compositor in that case (startSystemMove is ignored on
             # other platforms, so this is a strict fallback).
@@ -312,15 +432,23 @@ class AnalogClock(QWidget):
                 if handle is not None and handle.startSystemMove():
                     return
             self.old_pos = event.globalPos()
+            # Capture the cursor's offset from the window top-left so drag
+            # positions can be computed absolutely from the cursor.
+            self._drag_offset = event.globalPos() - QPoint(self.x(), self.y())
 
     def mouseMoveEvent(self, event):
         # Require the left button to still be held: guards against a stale
         # old_pos (e.g. a release swallowed mid-compositor-grab) making the
         # window chase the cursor with no button pressed.
         if self.old_pos is not None and (event.buttons() & Qt.LeftButton):
-            delta = event.globalPos() - self.old_pos
-            self.move(self.x() + delta.x(), self.y() + delta.y())
-            self.old_pos = event.globalPos()
+            # Absolute positioning: derive the target from the cursor and the
+            # grab offset captured on press. This keeps the window exactly
+            # under the cursor even when grid snapping rounds the position,
+            # so large spacings never accumulate "lost" mouse travel.
+            target = event.globalPos() - self._drag_offset
+            if self.snap_to_grid:
+                target = QPoint(*self._snap_position(target.x(), target.y()))
+            self.move(target.x(), target.y())
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -358,9 +486,11 @@ class AnalogClock(QWidget):
         super().enterEvent(event)
 
     def mouseReleaseEvent(self, event):
+        self._grid_overlay.hide_grid()
         if event.button() == Qt.LeftButton and self.old_pos is not None:
             self.save_window_position()
         self.old_pos = None
+        self._drag_offset = None
 
     # ---- Painting -------------------------------------------------------------
 
@@ -482,6 +612,9 @@ class AnalogClock(QWidget):
             )
             self.apply_display_size(
                 dialog.chosen_clock_size(), dialog.chosen_font_size()
+            )
+            self.apply_grid_settings(
+                dialog.grid_snap_enabled(), dialog.grid_spacing()
             )
             self.update()
             # Single config write for the whole applied change set.

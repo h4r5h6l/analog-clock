@@ -13,6 +13,7 @@ from zoneinfo import available_timezones
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -198,6 +199,22 @@ class SettingsDialog(QDialog):
         tz_grid.addWidget(self.bottom_tz_combo, 1, 1)
         layout.addWidget(tz_group)
 
+        # Window position / snapping group
+        position_group = QGroupBox("Window position", self)
+        position_layout = QFormLayout(position_group)
+        self.snap_grid_checkbox = QCheckBox(position_group)
+        self.snap_grid_checkbox.setChecked(getattr(clock, "snap_to_grid", False))
+        self.snap_grid_checkbox.setToolTip(
+            "Show the grid while dragging and align the window to it"
+        )
+        position_layout.addRow("Snap to grid:", self.snap_grid_checkbox)
+        self.grid_spacing_spin = QSpinBox(position_group)
+        self.grid_spacing_spin.setRange(clock.MIN_GRID_SPACING, clock.MAX_GRID_SPACING)
+        self.grid_spacing_spin.setSuffix(" px")
+        self.grid_spacing_spin.setValue(getattr(clock, "grid_spacing", 10))
+        position_layout.addRow("Grid spacing:", self.grid_spacing_spin)
+        layout.addWidget(position_group)
+
         dialog_buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self
         )
@@ -267,4 +284,10 @@ class SettingsDialog(QDialog):
 
     def bottom_timezone_text(self):
         return self.bottom_tz_combo.currentText().strip()
+
+    def grid_snap_enabled(self):
+        return self.snap_grid_checkbox.isChecked()
+
+    def grid_spacing(self):
+        return self.grid_spacing_spin.value()
 

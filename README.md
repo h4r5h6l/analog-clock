@@ -11,6 +11,7 @@ A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog cl
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
 - **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
+- **Snap to Grid**: Optionally align the window to a visible grid while dragging (configurable spacing from 5 to 150 px in the settings dialog, default off for backward compatibility). The grid overlay appears on screen during the drag and disappears when you release the clock.
 - **Always on Top**: Frameless tool window that stays above other windows and re-shows itself if minimized
 - **Transparent Background**: 60% opacity for unobtrusive integration with the desktop
 - **Smooth Animations**: Repaints only when something actually changes
