@@ -12,7 +12,8 @@ A desktop analog clock widget for Linux, built with PyQt5. Two stacked analog cl
 - **Hardware Stats Monitor**: Real-time display of CPU, RAM, GPU, and VRAM usage (updates every 2 seconds)
 - **Battery Indicator**: Battery percentage and charging status (AC/BAT) in the hardware stats panel
 - **Draggable Anywhere**: Free dragging to any screen position; the position is remembered across restarts
-- **Always on Top**: Frameless tool window that stays above other windows and re-shows itself if minimized
+- **Always on Top**: Frameless tool window that stays above other windows and re-shows itself if minimized. Toggle the behavior anytime using the eye icon button in the top-left corner of the clock, or via the settings dialog.
+- **Eye Toggle Button**: Click the eye icon (👁️) in the top-left corner of the clock to quickly toggle always-on-top mode. When always-on-top is enabled, the eye is open; when disabled, it shows a stop sign (🚫). The setting persists across restarts. The eye button's opacity automatically matches the clock face opacity (with a 40% minimum) for consistent visual integration.
 - **Transparent Background**: 60% opacity for unobtrusive integration with the desktop
 - **Smooth Animations**: Repaints only when something actually changes
 - **Wayland-Safe**: Routes through XWayland (xcb) automatically so positioning and dragging work on both X11 and Wayland

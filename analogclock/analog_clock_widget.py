@@ -9,8 +9,8 @@ and hardware controllers.
 
 import sys
 
-from PyQt5.QtCore import QPoint, Qt, QTimer
-from PyQt5.QtGui import QColor, QPainter
+from PyQt5.QtCore import QPoint, Qt, QTimer, QRect
+from PyQt5.QtGui import QColor, QFont, QPainter, QFontMetrics
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget
 
 from analogclock import config
@@ -57,6 +57,9 @@ class AnalogClock(QWidget):
     WINDOW_HEIGHT = CLOCKS_HEIGHT + CONTROLS_SPACE
     WINDOW_WIDTH = CLOCK_SIZE + (HORIZONTAL_PADDING * 2) + SIDE_SLIDER_SPACE + HARDWARE_PANEL_WIDTH_BASE + SPECS_PANEL_SPACING
     KEEP_ON_TOP_SECONDS = 1.5
+    # Eye toggle button for always-on-top feature
+    EYE_BUTTON_SIZE = 20
+    EYE_BUTTON_MARGIN = 8
     # Free dragging vs edge snapping: when False (default) the clock can be
     # dragged freely to any position and remembers it across restarts; when
     # True the legacy bottom-left placement and enterEvent edge snap apply.
@@ -232,6 +235,7 @@ class AnalogClock(QWidget):
             "clock_size": int(self.CLOCK_SIZE),
             "font_size": int(self.font_size),
             "opacity": round(self.opacity, 3),
+            "always_on_top": bool(self.always_on_top),
         }
         config.save_window_position(payload)
 
@@ -296,7 +300,14 @@ class AnalogClock(QWidget):
             self.opacity = max(
                 self.MIN_OPACITY, min(self.MAX_OPACITY, float(saved_opacity))
             )
+        # Optional always-on-top setting -- tolerated missing on older files.
+        saved_aot = data.get("always_on_top")
+        if isinstance(saved_aot, bool):
+            self.always_on_top = saved_aot
         self._apply_geometry()
+
+        # Re-apply window flags to honor any restored always-on-top setting.
+        self.apply_always_on_top_flags()
 
         # Reject positions whose center no longer sits on any connected
         # screen (e.g. saved on an external monitor that is now detached).
@@ -323,6 +334,10 @@ class AnalogClock(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            # Check if the click is on the eye toggle button
+            if self.eye_button_rect().contains(event.pos()):
+                self.toggle_always_on_top()
+                return
             # Native Wayland clients cannot move themselves; hand the drag
             # to the compositor in that case (startSystemMove is ignored on
             # other platforms, so this is a strict fallback).
@@ -387,6 +402,7 @@ class AnalogClock(QWidget):
         painter = QPainter(self)
         try:
             self.paint_clocks_and_specs(painter)
+            self.draw_eye_button(painter)
         finally:
             # Release the paint device immediately. Letting the painter stay
             # active past this event makes every following begin/end cycle log
@@ -433,6 +449,72 @@ class AnalogClock(QWidget):
             font_size=self.font_size,
             opacity=self.opacity,
         )
+
+    # ---- Eye toggle button ------------------------------------------------------
+
+    def eye_button_rect(self):
+        """Return the screen-rect for the always-on-top eye toggle button."""
+        x = self.EYE_BUTTON_MARGIN
+        y = self.EYE_BUTTON_MARGIN + getattr(self, 'top_control_offset', 0) - 5
+        return QRect(x, y, self.EYE_BUTTON_SIZE, self.EYE_BUTTON_SIZE)
+
+    def draw_eye_button(self, painter):
+        """Draw the eye toggle button in the top-left corner.
+        
+        The button's opacity is tied to the clock face opacity setting, with a
+        minimum alpha floor so the control stays tappable even at low opacity.
+        """
+        painter.save()
+        try:
+            rect = self.eye_button_rect()
+
+            # Apply the same opacity as the clock face/sheet, with a floor so
+            # the button remains visible and tappable at very low opacities.
+            button_opacity = max(0.4, self.opacity)
+            painter.setOpacity(button_opacity)
+
+            # Button background (semi-transparent rounded rect)
+            palette = self.colors.resolved_palette()
+            bg_color = QColor(palette["sheet_color"])
+            bg_color.setAlpha(int(180 * button_opacity))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(bg_color)
+            painter.drawRoundedRect(rect, 4, 4)
+
+            # Border
+            border_color = QColor(palette["border_color"])
+            painter.setPen(border_color)
+            painter.drawRoundedRect(rect, 4, 4)
+
+            # Eye icon - use Unicode characters
+            # 👁️ (U+1F441 U+FE0F) for enabled/on-top, 🚫 for disabled
+            font = QFont("Arial", 10, QFont.Bold)
+            painter.setFont(font)
+            fm = QFontMetrics(font)
+
+            if self.always_on_top:
+                # Eye open symbol (Unicode: U+1F441 U+FE0F)
+                icon_text = "👁️"
+            else:
+                # Stop sign for disabled state
+                icon_text = "🚫"
+
+            # Center the text in the button
+            text_width = fm.horizontalAdvance(icon_text)
+            text_height = fm.height()
+            text_x = rect.center().x() - text_width // 2
+            text_y = rect.center().y() + text_height // 2 - 2
+            painter.setPen(QColor(palette["hand_color"]))
+            painter.drawText(text_x, text_y, icon_text)
+        finally:
+            painter.restore()
+
+    def toggle_always_on_top(self):
+        """Toggle the always-on-top state and reapply window flags."""
+        self.always_on_top = not self.always_on_top
+        self.apply_always_on_top_flags()
+        self.save_window_position()
+        self.update()
 
     # ---- Settings dialog ------------------------------------------------------
 
@@ -506,6 +588,13 @@ class AnalogClock(QWidget):
                 dialog.chosen_clock_size(), dialog.chosen_font_size()
             )
             self.apply_opacity(dialog.chosen_opacity())
+
+            # Apply always-on-top setting dynamically
+            new_aot = dialog.always_on_top()
+            if new_aot != self.always_on_top:
+                self.always_on_top = new_aot
+                self.apply_always_on_top_flags()
+
             self.update()
             # Single config write for the whole applied change set.
             self.save_window_position()

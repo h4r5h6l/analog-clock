@@ -13,6 +13,7 @@ from zoneinfo import available_timezones
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -146,6 +147,9 @@ class SettingsDialog(QDialog):
         self._chosen_font_size = int(clock.font_size)
         self._chosen_opacity = float(clock.opacity)
 
+        # Window behavior settings
+        self._always_on_top = getattr(clock, "always_on_top", True)
+
         layout = QVBoxLayout(self)
 
         color_group = QGroupBox("Clock colors", self)
@@ -190,16 +194,27 @@ class SettingsDialog(QDialog):
         self.font_size_spin.valueChanged.connect(self._on_size_changed)
         layout.addWidget(size_group)
 
-        opacity_group = QGroupBox("Opacity (face & sheet)", self)
-        opacity_layout = QHBoxLayout(opacity_group)
+        opacity_group = QGroupBox("Opacity & Window behavior", self)
+        opacity_layout = QVBoxLayout(opacity_group)
+        
+        # Opacity control row
+        opacity_row = QHBoxLayout()
         self.opacity_slider = QSlider(Qt.Horizontal, opacity_group)
         self.opacity_slider.setRange(20, 100)
         self.opacity_slider.setSingleStep(5)
         self.opacity_slider.setValue(round(self._chosen_opacity * 100))
         self.opacity_pct_label = QLabel(self._format_pct(self._chosen_opacity))
         self.opacity_slider.valueChanged.connect(self._on_opacity_changed)
-        opacity_layout.addWidget(self.opacity_pct_label)
-        opacity_layout.addWidget(self.opacity_slider)
+        opacity_row.addWidget(self.opacity_pct_label)
+        opacity_row.addWidget(self.opacity_slider)
+        opacity_layout.addLayout(opacity_row)
+        
+        # Always-on-top checkbox
+        self.always_on_top_checkbox = QCheckBox("Keep clock above other windows", opacity_group)
+        self.always_on_top_checkbox.setChecked(self._always_on_top)
+        self.always_on_top_checkbox.setToolTip("Keep the clock window always visible on top of other windows")
+        opacity_layout.addWidget(self.always_on_top_checkbox)
+        
         layout.addWidget(opacity_group)
 
         preview_group = QGroupBox("Live preview", self)
@@ -294,6 +309,9 @@ class SettingsDialog(QDialog):
 
     def chosen_opacity(self):
         return self.opacity_slider.value() / 100.0
+
+    def always_on_top(self):
+        return self.always_on_top_checkbox.isChecked()
 
     def top_timezone_text(self):
         return self.top_tz_combo.currentText().strip()
