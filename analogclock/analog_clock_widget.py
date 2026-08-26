@@ -111,7 +111,7 @@ class AnalogClock(QWidget):
     # Hardware specs panel (positioned to the right of clocks). The *_BASE
     # values are the panel size at DEFAULT_CLOCK_SIZE; _apply_geometry scales
     # them with the clock so the background sheet grows with it.
-    HARDWARE_PANEL_HEIGHT_BASE = 110
+    HARDWARE_PANEL_HEIGHT_BASE = 167
     HARDWARE_PANEL_WIDTH_BASE = 90
     SPECS_PANEL_SPACING = 24
     WINDOW_HEIGHT = CLOCKS_HEIGHT + CONTROLS_SPACE
@@ -185,6 +185,10 @@ class AnalogClock(QWidget):
         # class defaults independently.
         self.CLOCK_SIZE = self.DEFAULT_CLOCK_SIZE
         self.font_size = self.DEFAULT_FONT_SIZE
+        # Whether the hardware specs panel shows percentage values next to
+        # each label; bars always render regardless. Toggled via the eye menu
+        # or future settings UI.
+        self.show_metric_values = True
         # Recompute clock/panel/window geometry from the current size and fix
         # the window to the new size (includes the reserved top control area).
         self._apply_geometry()
@@ -313,6 +317,7 @@ class AnalogClock(QWidget):
             "grid_spacing": int(self.grid_spacing),
             "opacity": round(self.opacity, 3),
             "always_on_top": bool(self.always_on_top),
+            "show_metric_values": bool(self.show_metric_values),
         }
         config.save_window_position(payload)
 
@@ -391,6 +396,10 @@ class AnalogClock(QWidget):
         saved_aot = data.get("always_on_top")
         if isinstance(saved_aot, bool):
             self.always_on_top = saved_aot
+        # Optional show-metric-values toggle -- tolerated missing on older files.
+        saved_smv = data.get("show_metric_values")
+        if isinstance(saved_smv, bool):
+            self.show_metric_values = saved_smv
         self._apply_geometry()
 
         # Re-apply window flags to honor any restored always-on-top setting.
@@ -578,6 +587,7 @@ class AnalogClock(QWidget):
             palette,
             font_size=self.font_size,
             opacity=self.opacity,
+            show_values=self.show_metric_values,
         )
 
     # ---- Eye toggle button ------------------------------------------------------
@@ -727,6 +737,8 @@ class AnalogClock(QWidget):
             if new_aot != self.always_on_top:
                 self.always_on_top = new_aot
                 self.apply_always_on_top_flags()
+
+            self.show_metric_values = dialog.chosen_show_metric_values()
 
             self.update()
             # Single config write for the whole applied change set.
