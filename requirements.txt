@@ -4,7 +4,11 @@ PyQt5>=5.15.0
 # CPU and RAM usage statistics
 psutil>=5.9.0
 
-# NVIDIA GPU monitoring (optional at runtime -- falls back to nvidia-smi)
+# NVIDIA GPU monitoring
+# (optional at runtime -- falls back to nvidia-smi)
+# Requires NVIDIA driver installed at the system level 
+# (e.g. sudo apt install nvidia-driver-595-open)
+# Without the driver, GPU/VRAM stats will show "N/A" in the hardware panel
 GPUtil>=1.4.0
 
 # Provides the "distutils" shim GPUtil imports on Python 3.12+ (stdlib removed it)

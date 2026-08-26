@@ -112,7 +112,7 @@ class AnalogClock(QWidget):
     # values are the panel size at DEFAULT_CLOCK_SIZE; _apply_geometry scales
     # them with the clock so the background sheet grows with it.
     HARDWARE_PANEL_HEIGHT_BASE = 167
-    HARDWARE_PANEL_WIDTH_BASE = 90
+    HARDWARE_PANEL_WIDTH_BASE = 132
     SPECS_PANEL_SPACING = 24
     WINDOW_HEIGHT = CLOCKS_HEIGHT + CONTROLS_SPACE
     WINDOW_WIDTH = CLOCK_SIZE + (HORIZONTAL_PADDING * 2) + SIDE_SLIDER_SPACE + HARDWARE_PANEL_WIDTH_BASE + SPECS_PANEL_SPACING

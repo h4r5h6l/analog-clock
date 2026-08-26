@@ -42,7 +42,9 @@ _STUB_STATS = {
     "gpu_percent": 31.2,
     "gpu_vram_percent": 42.1,
     "gpu_available": True,
-    "battery_text": "BAT 77%",
+    "battery_text": "77% BAT",
+    "battery_percent": 77,
+    "battery_power_state": "BAT",
 }
 
 
@@ -59,7 +61,7 @@ class _AppearancePreview(QWidget):
     MAX_PREVIEW_CLOCK_SIZE = 170
     DEFAULT_FONT_SIZE = 10
     DEFAULT_OPACITY = 0.60
-    PANEL_W_RATIO = 90 / 160
+    PANEL_W_RATIO = 132 / 160
     # Matches AnalogClock.HARDWARE_PANEL_HEIGHT_BASE / DEFAULT_CLOCK_SIZE
     # (167 / 200) so the preview fits the taller meter rows.
     PANEL_H_RATIO = 167 / 200

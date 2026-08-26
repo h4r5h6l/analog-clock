@@ -81,16 +81,18 @@ def draw_meter_row(painter, x, y, width, label, value_percent, fill_color, track
     """Draw one labeled meter row: label + value text with a bar underneath.
 
     The label is left-aligned and the value (``NN%`` or ``N/A``) is
-    right-aligned on the same text line (skipped when ``show_value`` is
-    False); a rounded 5px track spans the row width below the text,
-    overlaid by a fill proportional to ``value_percent`` unless ``na``
-    is True. ``track_offset`` is the distance from the row's top to the
-    bar; it defaults to the text height (bar right under the label).
+    right-aligned on the same text line; when ``show_value`` is False the
+    default percentage is skipped, but an explicit ``value_text`` is still
+    drawn (if ``na`` is False). A rounded 5px track spans the row width
+    below the text, overlaid by a fill proportional to ``value_percent``
+    unless ``na`` is True. ``track_offset`` is the distance from the row's
+    top to the bar; it defaults to the text height (bar right under the
+    label).
     """
     text_height = painter.fontMetrics().height()
     text_rect = QRectF(x, y, width, text_height)
 
-    if show_value:
+    if show_value or (not na and value_text is not None):
         if na:
             dimmed_label = QColor(label_color)
             dimmed_label.setAlpha(round(dimmed_label.alpha() * NA_ALPHA_RATIO))
@@ -238,6 +240,9 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
     ``panel_x/y/width/height`` describe the panel rect computed by the
     caller from the widget's layout constants; ``font_size`` is the specs
     text point size (the caller controls it from the appearance settings).
+    When ``show_values`` is False the percentage labels are hidden for
+    CPU/RAM/GPU/VRAM, while the Battery row still shows just the power
+    state (AC/BAT) instead of the full percentage.
     """
     text_color = QColor(colors["text_color"])
     border_color = QColor(colors["border_color"])
@@ -274,12 +279,20 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
 
     track_color = QColor(120, 120, 120, 140)
     gpu_available = stats["gpu_available"]
-    battery_text = stats["battery_text"]
+    battery_text = stats.get("battery_text", "")
+    battery_percent = stats.get("battery_percent")
+    battery_power_state = stats.get("battery_power_state") or ""
 
-    battery_percent = None
-    match = re.match(r"\s*(\d+(?:\.\d+)?)%", battery_text or "")
-    if match:
-        battery_percent = float(match.group(1))
+    # Fallback: parse from battery_text if individual fields aren't
+    # provided (e.g. older callers or the settings preview stub).
+    if battery_percent is None:
+        match = re.match(r"\s*(\d+(?:\.\d+)?)%", battery_text or "")
+        if match:
+            battery_percent = float(match.group(1))
+    if not battery_power_state:
+        parts = (battery_text or "").strip().split()
+        if len(parts) >= 2:
+            battery_power_state = parts[-1]
 
     # Per-row fill colors: usage bars go green→yellow→red; battery is reversed.
     cpu_color = _usage_color(stats["cpu_percent"])
@@ -354,6 +367,18 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         track_offset=track_offset,
     )
 
+    # When metric values are hidden, show only the power state (AC/DC);
+    # when visible, show battery percentage before the power state.
+    if show_values:
+        if battery_percent is not None and battery_power_state:
+            bat_value_text = f"{battery_percent:.0f}% {battery_power_state}"
+        elif battery_percent is not None:
+            bat_value_text = f"{battery_percent:.0f}%"
+        else:
+            bat_value_text = None
+    else:
+        bat_value_text = battery_power_state if battery_power_state else None
+
     draw_meter_row(
         painter,
         text_x,
@@ -366,7 +391,7 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
         text_color,
         border_color,
         na=battery_percent is None,
-        value_text=battery_text,
+        value_text=bat_value_text,
         show_value=show_values,
         track_offset=track_offset,
     )

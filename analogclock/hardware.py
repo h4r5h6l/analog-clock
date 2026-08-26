@@ -29,6 +29,10 @@ class HardwareMonitor:
         self.gpu_available = False
         # Cached display label so painting never touches sensors directly.
         self.battery_label = "--%"
+        # Individual battery fields cached at poll time so drawing code
+        # never touches sensors directly and can compose text per state.
+        self._battery_percent = None
+        self._battery_power_state = None
 
     def poll(self):
         """Update CPU, RAM, GPU, VRAM usage percentages and battery label."""
@@ -43,7 +47,13 @@ class HardwareMonitor:
             self.ram_percent = 0
 
         self._poll_gpu()
-        self.battery_label = self.battery_text()
+        # Cache battery values once per poll cycle so painting never
+        # touches sensors directly on every paint event.
+        self._battery_percent = self.battery_percent()
+        self._battery_power_state = self.battery_power_state()
+        self.battery_label = self.battery_text(
+            self._battery_percent, self._battery_power_state
+        )
 
     def _poll_gpu(self):
         """GPUtil first, then the nvidia-smi subprocess fallback."""
@@ -143,10 +153,17 @@ class HardwareMonitor:
 
         return None
 
-    def battery_text(self):
-        """Rendered battery label, e.g. '76% AC' or '--%' when unknown."""
-        percent = self.battery_percent()
-        power_state = self.battery_power_state()
+    def battery_text(self, percent=None, power_state=None):
+        """Rendered battery label, e.g. '76% AC' or '--%' when unknown.
+
+        Pre-computed ``percent`` and ``power_state`` can be passed in to
+        avoid redundant sensor reads when the values are already cached
+        from :meth:`poll`.
+        """
+        if percent is None:
+            percent = self.battery_percent()
+        if power_state is None:
+            power_state = self.battery_power_state()
         text = "--%" if percent is None else f"{percent}%"
         if power_state is not None:
             text = f"{text} {power_state}"
@@ -163,4 +180,6 @@ class HardwareMonitor:
             "gpu_vram_percent": self.gpu_vram_percent,
             "gpu_available": self.gpu_available,
             "battery_text": self.battery_label,
+            "battery_percent": self._battery_percent,
+            "battery_power_state": self._battery_power_state,
         }
