@@ -60,7 +60,9 @@ class _AppearancePreview(QWidget):
     DEFAULT_FONT_SIZE = 10
     DEFAULT_OPACITY = 0.60
     PANEL_W_RATIO = 90 / 160
-    PANEL_H_RATIO = 110 / 160
+    # Matches AnalogClock.HARDWARE_PANEL_HEIGHT_BASE / DEFAULT_CLOCK_SIZE
+    # (167 / 200) so the preview fits the taller meter rows.
+    PANEL_H_RATIO = 167 / 200
     MARGIN = 16
     GAP = 8
 
@@ -70,9 +72,10 @@ class _AppearancePreview(QWidget):
         self._clock_size = self.CLOCK_SIZE
         self._font_size = self.DEFAULT_FONT_SIZE
         self._opacity = self.DEFAULT_OPACITY
+        self._show_metric_values = True
         self._apply_size()
 
-    def set_state(self, manual_palette, clock_size=None, font_size=None, opacity=None):
+    def set_state(self, manual_palette, clock_size=None, font_size=None, opacity=None, show_metric_values=None):
         self.manual_palette = dict(manual_palette)
         if clock_size is not None:
             self._clock_size = max(
@@ -82,6 +85,8 @@ class _AppearancePreview(QWidget):
             self._font_size = int(font_size)
         if opacity is not None:
             self._opacity = max(0.05, min(1.0, float(opacity)))
+        if show_metric_values is not None:
+            self._show_metric_values = bool(show_metric_values)
         self._apply_size()
         self.update()
 
@@ -120,6 +125,7 @@ class _AppearancePreview(QWidget):
                 colors,
                 font_size=self._font_size,
                 opacity=self._opacity,
+                show_values=self._show_metric_values,
             )
         finally:
             painter.end()
@@ -214,6 +220,13 @@ class SettingsDialog(QDialog):
         self.always_on_top_checkbox.setChecked(self._always_on_top)
         self.always_on_top_checkbox.setToolTip("Keep the clock window always visible on top of other windows")
         opacity_layout.addWidget(self.always_on_top_checkbox)
+
+        # Show percentage values in the hardware stats panel
+        self.show_metrics_checkbox = QCheckBox("Show metric values (%)", opacity_group)
+        self.show_metrics_checkbox.setChecked(getattr(clock, "show_metric_values", True))
+        self.show_metrics_checkbox.setToolTip("Toggle percentage labels next to CPU/RAM/GPU/VRAM/Battery bars")
+        self.show_metrics_checkbox.toggled.connect(self.refresh_preview)
+        opacity_layout.addWidget(self.show_metrics_checkbox)
         
         layout.addWidget(opacity_group)
 
@@ -296,6 +309,7 @@ class SettingsDialog(QDialog):
             clock_size=self._chosen_clock_size,
             font_size=self._chosen_font_size,
             opacity=self._chosen_opacity,
+            show_metric_values=self.show_metrics_checkbox.isChecked(),
         )
 
     def _on_size_changed(self):
@@ -325,6 +339,9 @@ class SettingsDialog(QDialog):
 
     def chosen_opacity(self):
         return self.opacity_slider.value() / 100.0
+
+    def chosen_show_metric_values(self):
+        return self.show_metrics_checkbox.isChecked()
 
     def always_on_top(self):
         return self.always_on_top_checkbox.isChecked()

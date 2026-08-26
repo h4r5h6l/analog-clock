@@ -7,18 +7,42 @@ All geometry/scale math lives here.
 """
 
 import math
+import re
 
 from PyQt5.QtCore import QRectF, Qt
-from PyQt5.QtGui import QBrush, QColor, QPen
+from PyQt5.QtGui import QBrush, QColor, QPainterPath, QPen
 
 from analogclock.background_sheet import draw_background_sheet
 
 # Specs panel styling (extracted from the former paintEvent constants).
 SHEET_OPACITY = 0.82
-SHEET_PADDING = 8
-SHEET_RADIUS = 12
+SHEET_PADDING = 12
+SHEET_RADIUS = 14
 LINE_HEIGHT = 19
 TEXT_PADDING = 6
+METER_TRACK_HEIGHT = 5
+METER_TRACK_RADIUS = 2.5
+NA_ALPHA_RATIO = 0.45
+
+_COLOR_LOW = QColor(76, 175, 80)    # green
+_COLOR_MID = QColor(255, 193, 7)    # amber/yellow
+_COLOR_HIGH = QColor(244, 67, 54)   # red
+
+
+def _usage_color(value_percent):
+    """Return a green→yellow→red color for a 0‑100 usage percentage."""
+    t = max(0.0, min(100.0, value_percent)) / 100.0
+    if t < 0.5:
+        s = t / 0.5
+        r = _COLOR_LOW.red() + s * (_COLOR_MID.red() - _COLOR_LOW.red())
+        g = _COLOR_LOW.green() + s * (_COLOR_MID.green() - _COLOR_LOW.green())
+        b = _COLOR_LOW.blue() + s * (_COLOR_MID.blue() - _COLOR_LOW.blue())
+    else:
+        s = (t - 0.5) / 0.5
+        r = _COLOR_MID.red() + s * (_COLOR_HIGH.red() - _COLOR_MID.red())
+        g = _COLOR_MID.green() + s * (_COLOR_HIGH.green() - _COLOR_MID.green())
+        b = _COLOR_MID.blue() + s * (_COLOR_HIGH.blue() - _COLOR_MID.blue())
+    return QColor(round(r), round(g), round(b))
 
 
 def draw_outlined_text(painter, rect, alignment, text, fill_color, border_color):
@@ -51,6 +75,66 @@ def draw_outlined_hand(painter, center_x, center_y, length, angle, width, fill_c
     painter.setPen(QPen(border_color, 1))
     painter.setBrush(QBrush(fill_color))
     painter.drawEllipse(QRectF(end_x - dot_radius, end_y - dot_radius, dot_radius * 2, dot_radius * 2))
+
+
+def draw_meter_row(painter, x, y, width, label, value_percent, fill_color, track_color, label_color, border_color, na=False, value_text=None, show_value=True, track_offset=None):
+    """Draw one labeled meter row: label + value text with a bar underneath.
+
+    The label is left-aligned and the value (``NN%`` or ``N/A``) is
+    right-aligned on the same text line (skipped when ``show_value`` is
+    False); a rounded 5px track spans the row width below the text,
+    overlaid by a fill proportional to ``value_percent`` unless ``na``
+    is True. ``track_offset`` is the distance from the row's top to the
+    bar; it defaults to the text height (bar right under the label).
+    """
+    text_height = painter.fontMetrics().height()
+    text_rect = QRectF(x, y, width, text_height)
+
+    if show_value:
+        if na:
+            dimmed_label = QColor(label_color)
+            dimmed_label.setAlpha(round(dimmed_label.alpha() * NA_ALPHA_RATIO))
+            draw_outlined_text(
+                painter,
+                text_rect,
+                Qt.AlignRight | Qt.AlignVCenter,
+                "N/A",
+                dimmed_label,
+                border_color,
+            )
+        else:
+            draw_outlined_text(
+                painter,
+                text_rect,
+                Qt.AlignRight | Qt.AlignVCenter,
+                value_text if value_text is not None else f"{value_percent:.0f}%",
+                label_color,
+                border_color,
+            )
+
+    draw_outlined_text(
+        painter,
+        text_rect,
+        Qt.AlignLeft | Qt.AlignVCenter,
+        label,
+        label_color,
+        border_color,
+    )
+
+    track_y = y + (text_height if track_offset is None else track_offset)
+    track_path = QPainterPath()
+    track_path.addRoundedRect(QRectF(x, track_y, width, METER_TRACK_HEIGHT), METER_TRACK_RADIUS, METER_TRACK_RADIUS)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(track_color))
+    painter.drawPath(track_path)
+
+    if not na:
+        fill_width = width * (value_percent / 100)
+        fill_path = QPainterPath()
+        fill_path.addRoundedRect(QRectF(x, track_y, fill_width, METER_TRACK_HEIGHT), METER_TRACK_RADIUS, METER_TRACK_RADIUS)
+        painter.setBrush(QBrush(fill_color))
+        painter.drawPath(fill_path)
+        painter.setBrush(Qt.NoBrush)
 
 
 def draw_clock(painter, top_left_x, top_left_y, now, size, colors, opacity=1.0):
@@ -147,7 +231,7 @@ def draw_clock(painter, top_left_x, top_left_y, now, size, colors, opacity=1.0):
     painter.setBrush(Qt.NoBrush)
 
 
-def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10, opacity=SHEET_OPACITY):
+def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, stats, colors, font_size=10, opacity=SHEET_OPACITY, show_values=True):
     """Draw the rounded specs sheet plus CPU/RAM/GPU/VRAM/battery text.
 
     ``stats`` comes from hardware.HardwareMonitor.stats_snapshot();
@@ -159,6 +243,27 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
     border_color = QColor(colors["border_color"])
     sheet_color = QColor(colors["sheet_color"])
 
+    # Set up font for specs text
+    specs_font = painter.font()
+    specs_font.setPointSize(font_size)
+    specs_font.setBold(True)
+    painter.setFont(specs_font)
+
+    padding = TEXT_PADDING
+    # Line height tracks the font so the five stat rows keep their spacing
+    # as the user enlarges the specs text; extra room fits each row's meter
+    # bar plus breathing space between rows.
+    line_height = round(font_size * 3.2)
+    # Bar sits below the label text; derive offset from actual font metrics
+    # so the bar never collides with the text regardless of font size.
+    text_height = painter.fontMetrics().height()
+    track_offset = text_height + 2
+
+    # Compute panel_height from the actual content so the sheet is
+    # vertically symmetrical (equal padding above and below).
+    content_height = 4 * line_height + track_offset + METER_TRACK_HEIGHT
+    panel_height = content_height + (padding * 2)
+
     # Background sheet as an independent rounded rectangle so the panel and
     # clocks appear visually distinct.
     sheet_x = panel_x - SHEET_PADDING
@@ -167,71 +272,103 @@ def draw_hardware_specs(painter, panel_x, panel_y, panel_width, panel_height, st
     sheet_h = panel_height + (SHEET_PADDING * 2)
     draw_background_sheet(painter, sheet_x, sheet_y, sheet_w, sheet_h, sheet_color, opacity, radius=SHEET_RADIUS)
 
-    # Set up font for specs text
-    specs_font = painter.font()
-    specs_font.setPointSize(font_size)
-    specs_font.setBold(True)
-    painter.setFont(specs_font)
-
-    padding = TEXT_PADDING
-    # Line height tracks the font so the five stat lines keep their spacing
-    # as the user enlarges the specs text.
-    line_height = round(font_size * 1.9)
-
-    # Prepare specs text
-    cpu_text = f"CPU: {stats['cpu_percent']:.0f}%"
-    ram_text = f"RAM: {stats['ram_percent']:.0f}%"
-    gpu_text = f"GPU: {stats['gpu_percent']:.0f}%" if stats["gpu_available"] else "GPU: N/A"
-    vram_text = f"VRAM: {stats['gpu_vram_percent']:.0f}%" if stats["gpu_available"] else "VRAM: N/A"
+    track_color = QColor(120, 120, 120, 140)
+    gpu_available = stats["gpu_available"]
     battery_text = stats["battery_text"]
 
-    # Draw specs text lines
+    battery_percent = None
+    match = re.match(r"\s*(\d+(?:\.\d+)?)%", battery_text or "")
+    if match:
+        battery_percent = float(match.group(1))
+
+    # Per-row fill colors: usage bars go green→yellow→red; battery is reversed.
+    cpu_color = _usage_color(stats["cpu_percent"])
+    ram_color = _usage_color(stats["ram_percent"])
+    gpu_color = _usage_color(stats["gpu_percent"])
+    vram_color = _usage_color(stats["gpu_vram_percent"])
+    bat_color = _usage_color(100 - (battery_percent or 0))
+
+    # Draw specs rows (label + value text with a meter bar underneath)
     text_x = panel_x + padding + 1
     text_y = panel_y + padding
 
-    draw_outlined_text(
+    draw_meter_row(
         painter,
-        QRectF(text_x, text_y, panel_width - (padding * 2), line_height),
-        Qt.AlignLeft,
-        cpu_text,
+        text_x,
+        text_y,
+        panel_width - (padding * 2),
+        "CPU:",
+        stats["cpu_percent"],
+        cpu_color,
+        track_color,
         text_color,
         border_color,
+        show_value=show_values,
+        track_offset=track_offset,
     )
 
-    draw_outlined_text(
+    draw_meter_row(
         painter,
-        QRectF(text_x, text_y + line_height, panel_width - (padding * 2), line_height),
-        Qt.AlignLeft,
-        ram_text,
+        text_x,
+        text_y + line_height,
+        panel_width - (padding * 2),
+        "RAM:",
+        stats["ram_percent"],
+        ram_color,
+        track_color,
         text_color,
         border_color,
+        show_value=show_values,
+        track_offset=track_offset,
     )
 
-    draw_outlined_text(
+    draw_meter_row(
         painter,
-        QRectF(text_x, text_y + (line_height * 2), panel_width - (padding * 2), line_height),
-        Qt.AlignLeft,
-        gpu_text,
+        text_x,
+        text_y + (line_height * 2),
+        panel_width - (padding * 2),
+        "GPU:",
+        stats["gpu_percent"],
+        gpu_color,
+        track_color,
         text_color,
         border_color,
+        na=not gpu_available,
+        show_value=show_values,
+        track_offset=track_offset,
     )
 
-    draw_outlined_text(
+    draw_meter_row(
         painter,
-        QRectF(text_x, text_y + (line_height * 3), panel_width - (padding * 2), line_height),
-        Qt.AlignLeft,
-        vram_text,
+        text_x,
+        text_y + (line_height * 3),
+        panel_width - (padding * 2),
+        "VRAM:",
+        stats["gpu_vram_percent"],
+        vram_color,
+        track_color,
         text_color,
         border_color,
+        na=not gpu_available,
+        show_value=show_values,
+        track_offset=track_offset,
     )
 
-    draw_outlined_text(
+    draw_meter_row(
         painter,
-        QRectF(text_x, text_y + (line_height * 4), panel_width - (padding * 2), line_height),
-        Qt.AlignLeft,
-        f" {battery_text}",
+        text_x,
+        text_y + (line_height * 4),
+        panel_width - (padding * 2),
+        "Battery:",
+        battery_percent if battery_percent is not None else 0,
+        bat_color,
+        track_color,
         text_color,
         border_color,
+        na=battery_percent is None,
+        value_text=battery_text,
+        show_value=show_values,
+        track_offset=track_offset,
     )
 
 
