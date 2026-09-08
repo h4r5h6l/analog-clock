@@ -2,9 +2,7 @@
 Type=Application
 Name=Analog Clock
 Comment=Dual timezone analog clock with hardware stats
-# Launch the packaged app via the project venv (PyQt5 + deps live there).
-Exec=/home/dell/Documents/git_projects/analog-clock/venv/bin/python /home/dell/Documents/git_projects/analog-clock/main.py
-Path=/home/dell/Documents/git_projects/analog-clock
-Icon=clock
+Exec=AnalogClock
+Icon=AnalogClock
 Terminal=false
 Categories=Utility;

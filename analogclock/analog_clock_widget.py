@@ -8,6 +8,8 @@ and hardware controllers.
 """
 
 import sys
+import shutil
+import subprocess
 
 from PyQt5.QtCore import QPoint, QRect, Qt, QTimer
 from PyQt5.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
@@ -95,7 +97,7 @@ class AnalogClock(QWidget):
     # Translucency of the clock face and the hardware-panel background sheet
     # (hands, ticks, text and borders stay fully opaque). Slider is in percent.
     DEFAULT_OPACITY = 0.60
-    MIN_OPACITY = 0.20
+    MIN_OPACITY = 0.0
     MAX_OPACITY = 1.0
     CLOCK_SIZE = 160
     # smaller gap between stacked clocks to bring faces closer together
@@ -133,6 +135,9 @@ class AnalogClock(QWidget):
     def __init__(self):
         super().__init__()
         self.always_on_top = True
+        self.show_on_all_desktops = False
+        self._settings_open = False
+        self._settings_dialog = None
         self.apply_always_on_top_flags()
         self.setAttribute(Qt.WA_TranslucentBackground)
         # Translucency applied to the clock face and the hardware-panel sheet
@@ -247,6 +252,14 @@ class AnalogClock(QWidget):
     # ---- Window flags / visibility -----------------------------------------
 
     def apply_always_on_top_flags(self):
+        """Apply the requested window flags without losing a visible clock.
+
+        Qt hides a visible widget whenever ``setWindowFlags`` changes its
+        native window.  The old implementation therefore made the clock
+        disappear after either the eye-button or settings-dialog toggle,
+        until the visibility timer happened to show it again.
+        """
+        was_visible = self.isVisible()
         flags = Qt.FramelessWindowHint | Qt.Tool
         # only add the always-on-top / bypass hint when requested
         if getattr(self, "always_on_top", True):
@@ -255,26 +268,91 @@ class AnalogClock(QWidget):
                 flags |= Qt.X11BypassWindowManagerHint
         self.setWindowFlags(flags)
 
+        # Re-show immediately because changing window flags hides a visible
+        # QWidget.  Do not activate it: toggling this preference should not
+        # steal focus from the application currently in use.
+        if was_visible:
+            self.show()
+            if self.always_on_top:
+                self.raise_()
+
     def ensure_on_top(self):
+        # Once disabled, always-on-top must not keep restoring a minimized or
+        # hidden window.  Otherwise the user cannot use normal window-manager
+        # behavior after turning the preference off.
+        if not getattr(self, "always_on_top", True):
+            return
         if self.windowState() & Qt.WindowMinimized:
             self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
         if not self.isVisible():
             self.show()
-        # only force raise when the clock is meant to stay on top
-        if getattr(self, "always_on_top", True):
+        self.raise_()
+
+    def set_always_on_top(self, enabled):
+        """Set and persist the always-on-top preference."""
+        self.always_on_top = bool(enabled)
+        self.apply_always_on_top_flags()
+        if self.show_on_all_desktops:
+            self.set_show_on_all_desktops(True, save=False)
+        self.save_window_position()
+        self.update()
+
+    @staticmethod
+    def virtual_desktop_support_available():
+        """Return whether this session can request an EWMH sticky window."""
+        return (
+            sys.platform.startswith("linux")
+            and QApplication.platformName() == "xcb"
+            and shutil.which("wmctrl") is not None
+        )
+
+    def set_show_on_all_desktops(self, enabled, save=True):
+        """Request that an X11 window-manager keep the clock on every desktop.
+
+        Qt has no cross-desktop API for virtual workspaces.  On X11, wmctrl
+        sends the standard EWMH ``sticky`` request; Wayland compositors keep
+        control of workspace placement, so the corresponding UI is disabled.
+        """
+        self.show_on_all_desktops = bool(enabled)
+        if self.virtual_desktop_support_available() and self.winId():
+            operation = "add" if self.show_on_all_desktops else "remove"
+            try:
+                subprocess.run(
+                    [
+                        "wmctrl", "-i", "-r", hex(int(self.winId())), "-b",
+                        f"{operation},sticky",
+                    ],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
+        if save:
+            self.save_window_position()
+
+    def show_from_tray(self):
+        """Reveal the clock explicitly from the tray menu."""
+        self.show()
+        if self.always_on_top:
             self.raise_()
 
     def keep_visible(self):
+        if not getattr(self, "always_on_top", True):
+            return
         if self.windowState() & Qt.WindowMinimized:
             self.setWindowState(self.windowState() & ~Qt.WindowMinimized)
         self.show()
-        # respect the user's toggle: don't force-focus if not always-on-top
-        if getattr(self, "always_on_top", True):
-            self.raise_()
-            self.activateWindow()
+        self.raise_()
+        self.activateWindow()
 
     def changeEvent(self, event):
-        if event.type() == event.WindowStateChange and self.windowState() & Qt.WindowMinimized:
+        if (
+            getattr(self, "always_on_top", True)
+            and event.type() == event.WindowStateChange
+            and self.windowState() & Qt.WindowMinimized
+        ):
             QTimer.singleShot(0, self.keep_visible)
             QTimer.singleShot(100, self.keep_visible)
         super().changeEvent(event)
@@ -317,6 +395,7 @@ class AnalogClock(QWidget):
             "grid_spacing": int(self.grid_spacing),
             "opacity": round(self.opacity, 3),
             "always_on_top": bool(self.always_on_top),
+            "show_on_all_desktops": bool(self.show_on_all_desktops),
             "show_metric_values": bool(self.show_metric_values),
         }
         config.save_window_position(payload)
@@ -396,6 +475,9 @@ class AnalogClock(QWidget):
         saved_aot = data.get("always_on_top")
         if isinstance(saved_aot, bool):
             self.always_on_top = saved_aot
+        saved_all_desktops = data.get("show_on_all_desktops")
+        if isinstance(saved_all_desktops, bool):
+            self.show_on_all_desktops = saved_all_desktops
         # Optional show-metric-values toggle -- tolerated missing on older files.
         saved_smv = data.get("show_metric_values")
         if isinstance(saved_smv, bool):
@@ -590,10 +672,10 @@ class AnalogClock(QWidget):
             show_values=self.show_metric_values,
         )
 
-    # ---- Eye toggle button ------------------------------------------------------
+    # ---- Always-on-top toggle ---------------------------------------------------
 
     def eye_button_rect(self):
-        """Return the screen-rect for the always-on-top eye toggle button."""
+        """Return the hit area for the borderless always-on-top toggle."""
         x = self.EYE_BUTTON_MARGIN
         y = self.EYE_BUTTON_MARGIN + getattr(self, 'top_control_offset', 0) - 5
         return QRect(x, y, self.EYE_BUTTON_SIZE, self.EYE_BUTTON_SIZE)
@@ -613,18 +695,7 @@ class AnalogClock(QWidget):
             button_opacity = max(0.4, self.opacity)
             painter.setOpacity(button_opacity)
 
-            # Button background (semi-transparent rounded rect)
             palette = self.colors.resolved_palette()
-            bg_color = QColor(palette["sheet_color"])
-            bg_color.setAlpha(int(180 * button_opacity))
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(bg_color)
-            painter.drawRoundedRect(rect, 4, 4)
-
-            # Border
-            border_color = QColor(palette["border_color"])
-            painter.setPen(border_color)
-            painter.drawRoundedRect(rect, 4, 4)
 
             # Eye icon - use Unicode characters
             # 👁️ (U+1F441 U+FE0F) for enabled/on-top, 🚫 for disabled
@@ -651,10 +722,7 @@ class AnalogClock(QWidget):
 
     def toggle_always_on_top(self):
         """Toggle the always-on-top state and reapply window flags."""
-        self.always_on_top = not self.always_on_top
-        self.apply_always_on_top_flags()
-        self.save_window_position()
-        self.update()
+        self.set_always_on_top(not self.always_on_top)
 
     # ---- Settings dialog ------------------------------------------------------
 
@@ -708,43 +776,53 @@ class AnalogClock(QWidget):
         dialog.move(x, y)
 
     def open_settings_dialog(self):
+        if self._settings_dialog is not None:
+            self._settings_dialog.raise_()
+            self._settings_dialog.activateWindow()
+            return
+
         dialog = self._build_settings_dialog()
-        # The clock itself is an always-on-top, window-manager-bypassing tool
-        # window, so a plain dialog stacks underneath it. Give the dialog the
-        # same stay-on-top hint, show it beside the clock (right preferred,
-        # left otherwise), bring it above, then run the modal loop on the
-        # already-visible dialog.
-        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-        dialog.show()
+        # Settings are a normal focused dialog. Unlike the clock, they do not
+        # force themselves above other applications or block other windows.
+        self._settings_open = True
+        self._settings_dialog = dialog
+        dialog.setWindowModality(Qt.NonModal)
+        dialog.finished.connect(
+            lambda result, settings_dialog=dialog: self._finish_settings_dialog(
+                settings_dialog, result
+            )
+        )
         self._place_beside_clock(dialog)
+        dialog.show()
         dialog.raise_()
         dialog.activateWindow()
-        if dialog.exec_() == QDialog.Accepted:
-            self.colors.apply_appearance_settings(dialog.chosen_colors())
-            self.timezones.set(
-                dialog.top_timezone_text(), dialog.bottom_timezone_text()
-            )
-            self.apply_display_size(
-                dialog.chosen_clock_size(), dialog.chosen_font_size()
-            )
-            self.apply_grid_settings(
-                dialog.grid_snap_enabled(), dialog.grid_spacing()
-            )
-            self.apply_opacity(dialog.chosen_opacity())
 
-            # Apply always-on-top setting dynamically
-            new_aot = dialog.always_on_top()
-            if new_aot != self.always_on_top:
-                self.always_on_top = new_aot
-                self.apply_always_on_top_flags()
+    def _finish_settings_dialog(self, dialog, result):
+        """Apply a completed modeless settings dialog, then release it."""
+        if dialog is not self._settings_dialog:
+            return
+        self._settings_dialog = None
+        self._settings_open = False
+        if result != QDialog.Accepted:
+            dialog.deleteLater()
+            return
 
-            self.show_metric_values = dialog.chosen_show_metric_values()
+        self.colors.apply_appearance_settings(dialog.chosen_colors())
+        self.timezones.set(dialog.top_timezone_text(), dialog.bottom_timezone_text())
+        self.apply_display_size(dialog.chosen_clock_size(), dialog.chosen_font_size())
+        self.apply_grid_settings(dialog.grid_snap_enabled(), dialog.grid_spacing())
+        self.apply_opacity(dialog.chosen_opacity())
 
-            self.update()
-            # Single config write for the whole applied change set.
-            self.save_window_position()
+        new_aot = dialog.always_on_top()
+        if new_aot != self.always_on_top:
+            self.always_on_top = new_aot
+            self.apply_always_on_top_flags()
+        self.set_show_on_all_desktops(dialog.show_on_all_desktops(), save=False)
+        self.show_metric_values = dialog.chosen_show_metric_values()
+
+        self.update()
+        self.save_window_position()
+        dialog.deleteLater()
 
     def contextMenuEvent(self, event):
         self.open_settings_dialog()
-
-

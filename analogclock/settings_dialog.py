@@ -13,6 +13,7 @@ from zoneinfo import available_timezones
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
+    QApplication,
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -86,7 +87,7 @@ class _AppearancePreview(QWidget):
         if font_size is not None:
             self._font_size = int(font_size)
         if opacity is not None:
-            self._opacity = max(0.05, min(1.0, float(opacity)))
+            self._opacity = max(0.0, min(1.0, float(opacity)))
         if show_metric_values is not None:
             self._show_metric_values = bool(show_metric_values)
         self._apply_size()
@@ -157,6 +158,7 @@ class SettingsDialog(QDialog):
 
         # Window behavior settings
         self._always_on_top = getattr(clock, "always_on_top", True)
+        self._show_on_all_desktops = getattr(clock, "show_on_all_desktops", False)
 
         layout = QVBoxLayout(self)
 
@@ -208,7 +210,7 @@ class SettingsDialog(QDialog):
         # Opacity control row
         opacity_row = QHBoxLayout()
         self.opacity_slider = QSlider(Qt.Horizontal, opacity_group)
-        self.opacity_slider.setRange(20, 100)
+        self.opacity_slider.setRange(0, 100)
         self.opacity_slider.setSingleStep(5)
         self.opacity_slider.setValue(round(self._chosen_opacity * 100))
         self.opacity_pct_label = QLabel(self._format_pct(self._chosen_opacity))
@@ -222,6 +224,19 @@ class SettingsDialog(QDialog):
         self.always_on_top_checkbox.setChecked(self._always_on_top)
         self.always_on_top_checkbox.setToolTip("Keep the clock window always visible on top of other windows")
         opacity_layout.addWidget(self.always_on_top_checkbox)
+
+        self.all_desktops_checkbox = QCheckBox(
+            "Show clock on all virtual desktops", opacity_group
+        )
+        self.all_desktops_checkbox.setChecked(self._show_on_all_desktops)
+        supported = clock.virtual_desktop_support_available()
+        self.all_desktops_checkbox.setEnabled(supported)
+        self.all_desktops_checkbox.setToolTip(
+            "Keep the clock visible while switching virtual desktops"
+            if supported
+            else "Requires an X11 desktop with wmctrl installed"
+        )
+        opacity_layout.addWidget(self.all_desktops_checkbox)
 
         # Show percentage values in the hardware stats panel
         self.show_metrics_checkbox = QCheckBox("Show metric values (%)", opacity_group)
@@ -264,12 +279,20 @@ class SettingsDialog(QDialog):
         position_layout.addRow("Grid spacing:", self.grid_spacing_spin)
         layout.addWidget(position_group)
 
+        quit_button = QPushButton("Quit", self)
+        quit_button.setToolTip("Close Analog Clock")
+        quit_button.clicked.connect(QApplication.quit)
+
         dialog_buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self
         )
         dialog_buttons.accepted.connect(self.accept)
         dialog_buttons.rejected.connect(self.reject)
-        layout.addWidget(dialog_buttons)
+        button_row = QHBoxLayout()
+        button_row.addWidget(quit_button)
+        button_row.addStretch()
+        button_row.addWidget(dialog_buttons)
+        layout.addLayout(button_row)
 
         # Keep the live preview in sync with the chosen colors and animate
         # its second hand once a second.
@@ -348,6 +371,9 @@ class SettingsDialog(QDialog):
     def always_on_top(self):
         return self.always_on_top_checkbox.isChecked()
 
+    def show_on_all_desktops(self):
+        return self.all_desktops_checkbox.isChecked()
+
     def top_timezone_text(self):
         return self.top_tz_combo.currentText().strip()
 
@@ -359,4 +385,3 @@ class SettingsDialog(QDialog):
 
     def grid_spacing(self):
         return self.grid_spacing_spin.value()
-
